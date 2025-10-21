@@ -28,6 +28,9 @@ next-env.d.ts
 
 __pycache__/
 
+# Configuration files with sensitive data
+config.py
+
 batch1
 batch2
 batch3

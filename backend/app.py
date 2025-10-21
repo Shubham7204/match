@@ -9,6 +9,7 @@ from config import GEMINI_API_KEY
 
 from fastapi import FastAPI, Body
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 import subprocess
 import uvicorn
 
@@ -142,7 +143,8 @@ class VideoRAGQuerier:
             'goal_attempt': 'goal_attempt', 'shot': 'goal_attempt', 'shots': 'goal_attempt',
             'free_kick': 'free_kick', 'free kick': 'free_kick',
             'corner_kick': 'corner_kick', 'corner': 'corner_kick',
-            'dribble': 'dribble', 'dribbling': 'dribble'
+            'dribble': 'dribble', 'dribbling': 'dribble',
+            'penalty': 'penalty', 'penalties': 'penalty', 'pk': 'penalty'
         }
         
         event_type = None
@@ -586,6 +588,15 @@ Output as a numbered list, engaging like a match report."""
 
 app = FastAPI()
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 workspace_path = r"C:\Users\SHUBHAM\Downloads\match\backend"
 clips_dir = os.path.join(workspace_path, "clips")
 os.makedirs(clips_dir, exist_ok=True)
@@ -593,7 +604,15 @@ video_path = os.path.join(workspace_path, "halftime.mp4")
 
 querier = VideoRAGQuerier(workspace_path)
 
-app.mount("/static", StaticFiles(directory=workspace_path), name="static")
+# Serve static files (images, videos, etc.) - mount specific directories
+from pathlib import Path
+for dir_name in ["batch1", "batch2", "batch3", "batch4", "batch5", "batch6", "batch7", "batch8", "batch9", "clips"]:
+    dir_path = Path(workspace_path) / dir_name
+    if dir_path.exists():
+        app.mount(f"/{dir_name}", StaticFiles(directory=str(dir_path)), name=dir_name)
+        print(f"Mounted /{dir_name} -> {dir_path}")
+    else:
+        print(f"Directory not found: {dir_path}")
 
 @app.post("/analyze")
 def analyze(query: str = Body(...)):
@@ -602,16 +621,16 @@ def analyze(query: str = Body(...)):
     if "error" in result:
         return result
     
-    # Function to adjust file paths to static URLs
+    # Function to adjust file paths to served URLs
     def adjust_paths(data):
         if "key_frame" in data:
-            data["key_frame"] = "/static/" + data["key_frame"]
+            data["key_frame"] = "/" + data["key_frame"].lstrip("/")
         if "frame_files" in data:
-            data["frame_files"] = ["/static/" + f for f in data["frame_files"]]
+            data["frame_files"] = ["/" + f.lstrip("/") for f in data["frame_files"]]
         if "context_frames" in data:
             for frame in data["context_frames"]:
                 if "file" in frame:
-                    frame["file"] = "/static/" + frame["file"]
+                    frame["file"] = "/" + frame["file"].lstrip("/")
         return data
     
     try:
@@ -625,12 +644,15 @@ def analyze(query: str = Body(...)):
                 event_type = result["event_type"]
                 clip_name = f"clip_{event_type}_{seq}.mp4"
                 clip_path = os.path.join(clips_dir, clip_name)
-                subprocess.run(
-                    ["ffmpeg", "-i", video_path, "-ss", start, "-to", end, "-c", "copy", clip_path],
-                    check=True,
-                    capture_output=True
-                )
-                evt["clip_url"] = f"/static/clips/{clip_name}"
+                
+                # Check if clip already exists
+                if not os.path.exists(clip_path):
+                    subprocess.run(
+                        ["ffmpeg", "-i", video_path, "-ss", start, "-to", end, "-c", "copy", clip_path],
+                        check=True,
+                        capture_output=True
+                    )
+                evt["clip_url"] = f"/clips/{clip_name}"
         else:
             adjust_paths(result)
             # Generate video clip
@@ -640,16 +662,19 @@ def analyze(query: str = Body(...)):
             event_type = result["event_type"]
             clip_name = f"clip_{event_type}_{seq}.mp4"
             clip_path = os.path.join(clips_dir, clip_name)
-            subprocess.run(
-                ["ffmpeg", "-i", video_path, "-ss", start, "-to", end, "-c", "copy", clip_path],
-                check=True,
-                capture_output=True
-            )
-            result["clip_url"] = f"/static/clips/{clip_name}"
+            
+            # Check if clip already exists
+            if not os.path.exists(clip_path):
+                subprocess.run(
+                    ["ffmpeg", "-i", video_path, "-ss", start, "-to", end, "-c", "copy", clip_path],
+                    check=True,
+                    capture_output=True
+                )
+            result["clip_url"] = f"/clips/{clip_name}"
     except Exception as e:
         result["clip_error"] = str(e)
     
     return result
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=9000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
