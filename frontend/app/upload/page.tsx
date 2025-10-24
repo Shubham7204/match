@@ -1,84 +1,114 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { SiteNav } from "@/components/site-nav"
 import { SiteFooter } from "@/components/footer"
-import { Upload, CheckCircle2 } from "lucide-react"
+import { Upload, CheckCircle2, Loader2 } from "lucide-react"
 
 export default function UploadPage() {
+  const router = useRouter()
+  const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [posterFile, setPosterFile] = useState<File | null>(null)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [posterUrl, setPosterUrl] = useState<string | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+
+  const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setVideoFile(file)
+      setVideoUrl(URL.createObjectURL(file))
+    }
+  }
+
+  const handlePosterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setPosterFile(file)
+      setPosterUrl(URL.createObjectURL(file))
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!videoFile) {
+      alert("Please select a video file")
+      return
+    }
+
+    setIsUploading(true)
+    setUploadProgress(0)
+
+    try {
+      const formData = new FormData(e.currentTarget)
+      formData.append("video", videoFile)
+      if (posterFile) {
+        formData.append("poster", posterFile)
+      }
+
+      const response = await fetch("http://localhost:9000/api/matches/upload", {
+        method: "POST",
+        body: formData,
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert("Match uploaded successfully! Redirecting to matches page...")
+        router.push("/matches")
+      } else {
+        alert(`Upload failed: ${data.error}`)
+      }
+    } catch (error) {
+      console.error("Upload error:", error)
+      alert("Upload failed. Please try again.")
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const handleReset = () => {
+    setVideoFile(null)
+    setPosterFile(null)
+    setVideoUrl(null)
+    setPosterUrl(null)
+  }
 
   return (
     <main className="min-h-screen bg-background text-foreground">
       <SiteNav />
       <section className="border-b border-border/60 bg-gradient-to-b from-secondary/5 to-background">
-        <div className="mx-auto max-w-4xl px-4 py-8 md:px-6 md:py-12">
-          <h1 className="text-4xl md:text-5xl font-bold mb-3">Upload Match Video</h1>
-          <p className="text-lg text-muted-foreground mb-4">
+        <div className="mx-auto max-w-4xl px-4 py-4 md:px-6 md:py-6">
+          <p className="text-sm text-muted-foreground">
             Upload your football match video and let our AI analyze it for highlights, player appearances, and key
             moments.
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Our system will process your video using advanced computer vision to automatically generate
-            broadcast-quality highlights.
           </p>
         </div>
       </section>
 
-      <section className="mx-auto max-w-4xl px-4 py-12 md:px-6 md:py-16">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
-          <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
-            <div className="flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-              <div>
-                <h3 className="font-semibold text-sm text-foreground">Event Detection</h3>
-                <p className="text-xs text-muted-foreground mt-1">Goals, fouls, tackles, celebrations</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
-            <div className="flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-              <div>
-                <h3 className="font-semibold text-sm text-foreground">Player Tracking</h3>
-                <p className="text-xs text-muted-foreground mt-1">Identify and track player performances</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
-            <div className="flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-              <div>
-                <h3 className="font-semibold text-sm text-foreground">Highlight Reel</h3>
-                <p className="text-xs text-muted-foreground mt-1">10-15 min from 90-min match</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <form
-          className="space-y-8"
-          onSubmit={(e) => {
-            e.preventDefault()
-            alert("Demo: Match metadata submitted for AI analysis. In production, this would process your video.")
-          }}
-        >
+      <section className="mx-auto max-w-4xl px-4 py-8 md:px-6 md:py-12">
+        <form className="space-y-8" onSubmit={handleSubmit}>
           <div className="grid gap-6 md:grid-cols-2">
             <label className="space-y-2">
               <span className="text-sm font-semibold text-foreground">Match Title *</span>
               <input
+                name="title"
                 className="w-full rounded-lg border border-border/60 bg-card/40 px-4 py-3 text-sm transition-all focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
                 placeholder="e.g., Team A vs Team B - Final"
                 required
+                disabled={isUploading}
               />
             </label>
             <label className="space-y-2">
               <span className="text-sm font-semibold text-foreground">Match Date *</span>
               <input
+                name="date"
                 type="date"
                 className="w-full rounded-lg border border-border/60 bg-card/40 px-4 py-3 text-sm transition-all focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
                 required
+                disabled={isUploading}
               />
             </label>
           </div>
@@ -90,11 +120,9 @@ export default function UploadPage() {
                 type="file"
                 accept="video/*"
                 className="w-full rounded-lg border border-border/60 bg-card/40 px-4 py-3 text-sm"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) setVideoUrl(URL.createObjectURL(file))
-                }}
+                onChange={handleVideoChange}
                 required
+                disabled={isUploading}
               />
               {videoUrl ? (
                 <video
@@ -111,60 +139,76 @@ export default function UploadPage() {
             </label>
 
             <label className="space-y-2">
-              <span className="text-sm font-semibold text-foreground">Poster Image</span>
+              <span className="text-sm font-semibold text-foreground">Poster Image (Optional)</span>
               <input
                 type="file"
                 accept="image/*"
                 className="w-full rounded-lg border border-border/60 bg-card/40 px-4 py-3 text-sm"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) setPosterUrl(URL.createObjectURL(file))
-                }}
+                onChange={handlePosterChange}
+                disabled={isUploading}
               />
               {posterUrl ? (
                 <img
-                  src={posterUrl || "/placeholder.svg"}
+                  src={posterUrl}
                   alt="Poster preview"
                   className="mt-3 aspect-video w-full rounded-lg border border-border/60 object-cover shadow-md"
                 />
               ) : (
                 <div className="mt-3 aspect-video w-full rounded-lg border-2 border-dashed border-border/40 bg-card/20 flex flex-col items-center justify-center gap-2">
                   <Upload className="w-6 h-6 text-muted-foreground" />
-                  <p className="text-xs text-muted-foreground">Select a poster image</p>
+                  <p className="text-xs text-muted-foreground">Select a poster image (optional)</p>
                 </div>
               )}
             </label>
           </div>
 
           <label className="space-y-2">
-            <span className="text-sm font-semibold text-foreground">Match Description</span>
+            <span className="text-sm font-semibold text-foreground">Match Description (Optional)</span>
             <textarea
+              name="description"
               className="min-h-32 w-full rounded-lg border border-border/60 bg-card/40 px-4 py-3 text-sm transition-all focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
               placeholder="Add details about the match, teams, tournament, etc..."
+              disabled={isUploading}
             />
           </label>
 
-          <div className="bg-secondary/50 border border-secondary/30 rounded-lg p-4">
-            <p className="text-xs text-muted-foreground">
-              <span className="font-semibold text-foreground">Note:</span> This is a demo interface. Files are processed
-              locally in your browser for preview. In production, videos would be sent to our AI pipeline for analysis.
-            </p>
-          </div>
+          {isUploading && (
+            <div className="bg-secondary/50 border border-secondary/30 rounded-lg p-4">
+              <div className="flex items-center gap-3">
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-foreground">Uploading match...</p>
+                  <div className="mt-2 h-2 bg-secondary/30 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
             <button
               type="submit"
-              className="inline-flex h-12 items-center rounded-lg bg-primary px-8 text-base font-semibold text-primary-foreground transition-all hover:opacity-90 hover:shadow-lg active:scale-95"
+              disabled={isUploading}
+              className="inline-flex h-12 items-center rounded-lg bg-primary px-8 text-base font-semibold text-primary-foreground transition-all hover:opacity-90 hover:shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Publish & Analyze
+              {isUploading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                "Upload Match"
+              )}
             </button>
             <button
               type="button"
-              className="inline-flex h-12 items-center rounded-lg border border-border/60 bg-background/60 px-8 text-base font-medium transition-all hover:bg-background/80 hover:shadow-md"
-              onClick={() => {
-                setVideoUrl(null)
-                setPosterUrl(null)
-              }}
+              onClick={handleReset}
+              disabled={isUploading}
+              className="inline-flex h-12 items-center rounded-lg border border-border/60 bg-background/60 px-8 text-base font-medium transition-all hover:bg-background/80 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Reset Form
             </button>
