@@ -7,7 +7,7 @@ export default function AboutSection() {
         <div className="text-center">
           <h2 className="text-4xl sm:text-5xl font-bold text-foreground mb-8">Digitizing Grassroots Football</h2>
           <p className="text-lg text-muted-foreground leading-relaxed mb-6">
-            SportVot is transforming how local sports are experienced and shared. Our platform enables clubs, academies,
+            KhelIQ is transforming how local sports are experienced and shared. Our platform enables clubs, academies,
             and organizers across India to livestream matches, create digital player profiles, and now—generate
             professional highlights automatically.
           </p>

@@ -7,8 +7,8 @@ export function SiteFooter() {
         <div className="grid gap-8 md:grid-cols-3 md:gap-12">
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-3">
-              <img src="/images/sportvot-logo-white.png" alt="SportVot" className="h-8 w-auto" draggable={false} />
-              <span className="text-sm font-medium text-foreground">SportVot TV</span>
+              <img src="/images/kheliq-logo-white.png" alt="KhelIQ" className="h-8 w-auto" draggable={false} />
+              <span className="text-sm font-medium text-foreground">KhelIQ</span>
             </div>
             <p className="text-sm text-muted-foreground">
               Digitizing grassroots football with AI-powered highlights and live streaming.
@@ -47,7 +47,7 @@ export function SiteFooter() {
         </div>
 
         <div className="mt-8 border-t border-border/40 pt-8 text-xs text-muted-foreground">
-          <p>©2025 SportVot. All rights reserved. Built for grassroots football.</p>
+          <p>©2025 KhelIQ. All rights reserved. Built for grassroots football.</p>
         </div>
       </div>
     </footer>

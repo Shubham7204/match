@@ -18,7 +18,7 @@ export default function BenefitsSection() {
     },
     {
       icon: Zap,
-      title: "SportVot Platform",
+      title: "KhelIQ Platform",
       description:
         "Power livestreams with instant highlights, automated match summaries, and searchable video archives—enhancing the entire grassroots sports ecosystem.",
     },

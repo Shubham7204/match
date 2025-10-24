@@ -12,7 +12,7 @@ const replays = Array.from({ length: 10 }).map((_, i) => ({
 }))
 const spotlights = Array.from({ length: 8 }).map((_, i) => ({
   id: i + 1,
-  title: `SportVot Spotlight ${i + 1}`,
+  title: `KhelIQ Spotlight ${i + 1}`,
   meta: "Spotlight",
 }))
 
@@ -21,7 +21,7 @@ export function ContentGrid() {
     <div className="pb-12">
       <SectionRow id="events" title="Events" items={events} />
       <SectionRow title="Replays" items={replays} />
-      <SectionRow title="SportVot Spotlight" items={spotlights} />
+      <SectionRow title="KhelIQ Spotlight" items={spotlights} />
     </div>
   )
 }

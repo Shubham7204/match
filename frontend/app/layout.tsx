@@ -14,7 +14,7 @@ const poppins = Poppins({
 })
 
 export const metadata: Metadata = {
-  title: "SportVot TV • Football",
+  title: "KhelIQ • AI Football Analysis",
   description: "Grassroots football — live, replays, highlights.",
   generator: "v0.app",
 }
@@ -25,8 +25,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="dark antialiased">
-      <body className={`font-sans ${poppins.variable} ${GeistMono.variable}`}>
+    <html lang="en" className="dark antialiased" suppressHydrationWarning>
+      <body className={`font-sans ${poppins.variable} ${GeistMono.variable}`} suppressHydrationWarning>
         <Suspense fallback={<div>Loading...</div>}>{children}</Suspense>
         <Analytics />
       </body>
