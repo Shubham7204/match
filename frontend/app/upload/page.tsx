@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { SiteNav } from "@/components/site-nav"
 import { SiteFooter } from "@/components/footer"
+import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Upload, CheckCircle2, Loader2 } from "lucide-react"
 
 export default function UploadPage() {
@@ -14,6 +15,17 @@ export default function UploadPage() {
   const [posterUrl, setPosterUrl] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [dialog, setDialog] = useState<{
+    isOpen: boolean
+    type: "success" | "error" | "warning" | "info"
+    title: string
+    message: string
+  }>({
+    isOpen: false,
+    type: "info",
+    title: "",
+    message: ""
+  })
 
   const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -34,7 +46,12 @@ export default function UploadPage() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!videoFile) {
-      alert("Please select a video file")
+      setDialog({
+        isOpen: true,
+        type: "warning",
+        title: "No Video Selected",
+        message: "Please select a video file before uploading."
+      })
       return
     }
 
@@ -56,14 +73,31 @@ export default function UploadPage() {
       const data = await response.json()
 
       if (data.success) {
-        alert("Match uploaded successfully! Redirecting to matches page...")
-        router.push("/matches")
+        setDialog({
+          isOpen: true,
+          type: "success",
+          title: "Upload Successful",
+          message: "Match uploaded successfully! Redirecting to matches page..."
+        })
+        setTimeout(() => {
+          router.push("/matches")
+        }, 1500)
       } else {
-        alert(`Upload failed: ${data.error}`)
+        setDialog({
+          isOpen: true,
+          type: "error",
+          title: "Upload Failed",
+          message: data.error || "An error occurred during upload."
+        })
       }
     } catch (error) {
       console.error("Upload error:", error)
-      alert("Upload failed. Please try again.")
+      setDialog({
+        isOpen: true,
+        type: "error",
+        title: "Upload Failed",
+        message: "Failed to connect to the server. Please try again."
+      })
     } finally {
       setIsUploading(false)
     }
@@ -216,6 +250,14 @@ export default function UploadPage() {
         </form>
       </section>
       <SiteFooter />
+      
+      <ConfirmDialog
+        isOpen={dialog.isOpen}
+        onClose={() => setDialog({ ...dialog, isOpen: false })}
+        type={dialog.type}
+        title={dialog.title}
+        message={dialog.message}
+      />
     </main>
   )
 }

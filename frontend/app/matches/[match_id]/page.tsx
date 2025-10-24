@@ -4,9 +4,10 @@ import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { SiteNav } from "@/components/site-nav"
 import { SiteFooter } from "@/components/footer"
+import { ConfirmDialog } from "@/components/confirm-dialog"
 import { 
   Play, Calendar, Loader2, AlertCircle, CheckCircle, 
-  ArrowLeft, Download, Trash2, RefreshCw 
+  ArrowLeft, Download, Trash2, RefreshCw, Video 
 } from "lucide-react"
 
 interface EventClip {
@@ -40,6 +41,18 @@ export default function MatchDetailsPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [selectedClipType, setSelectedClipType] = useState<string>("main")
   const [currentVideoUrl, setCurrentVideoUrl] = useState<string>("")
+  const [dialog, setDialog] = useState<{
+    isOpen: boolean
+    type: "success" | "error" | "warning" | "info" | "confirm"
+    title: string
+    message: string
+    onConfirm?: () => void
+  }>({
+    isOpen: false,
+    type: "info",
+    title: "",
+    message: ""
+  })
 
   useEffect(() => {
     fetchMatchDetails()
@@ -81,13 +94,30 @@ export default function MatchDetailsPage() {
       const data = await response.json()
 
       if (data.success) {
-        alert("Analysis completed successfully!")
-        fetchMatchDetails() // Refresh data
+        setDialog({
+          isOpen: true,
+          type: "success",
+          title: "Analysis Complete",
+          message: "Match analysis completed successfully! The page will refresh."
+        })
+        setTimeout(() => {
+          fetchMatchDetails()
+        }, 1500)
       } else {
-        alert(`Analysis failed: ${data.error}`)
+        setDialog({
+          isOpen: true,
+          type: "error",
+          title: "Analysis Failed",
+          message: data.error || "An error occurred during analysis."
+        })
       }
     } catch (err) {
-      alert("Failed to start analysis")
+      setDialog({
+        isOpen: true,
+        type: "error",
+        title: "Analysis Failed",
+        message: "Failed to connect to the server. Please try again."
+      })
       console.error(err)
     } finally {
       setIsAnalyzing(false)
@@ -95,26 +125,47 @@ export default function MatchDetailsPage() {
   }
 
   const handleDelete = async () => {
-    if (!confirm("Are you sure you want to delete this match? This action cannot be undone.")) {
-      return
-    }
+    setDialog({
+      isOpen: true,
+      type: "confirm",
+      title: "Delete Match",
+      message: "Are you sure you want to delete this match? This action cannot be undone.",
+      onConfirm: async () => {
+        try {
+          const response = await fetch(`http://localhost:9000/api/matches/${matchId}`, {
+            method: "DELETE",
+          })
+          const data = await response.json()
 
-    try {
-      const response = await fetch(`http://localhost:9000/api/matches/${matchId}`, {
-        method: "DELETE",
-      })
-      const data = await response.json()
-
-      if (data.success) {
-        alert("Match deleted successfully")
-        router.push("/matches")
-      } else {
-        alert(`Delete failed: ${data.error}`)
+          if (data.success) {
+            setDialog({
+              isOpen: true,
+              type: "success",
+              title: "Match Deleted",
+              message: "Match deleted successfully. Redirecting..."
+            })
+            setTimeout(() => {
+              router.push("/matches")
+            }, 1500)
+          } else {
+            setDialog({
+              isOpen: true,
+              type: "error",
+              title: "Delete Failed",
+              message: data.error || "Failed to delete match."
+            })
+          }
+        } catch (err) {
+          setDialog({
+            isOpen: true,
+            type: "error",
+            title: "Delete Failed",
+            message: "Failed to connect to the server."
+          })
+          console.error(err)
+        }
       }
-    } catch (err) {
-      alert("Failed to delete match")
-      console.error(err)
-    }
+    })
   }
 
   const playClip = (clipPath: string) => {
@@ -126,6 +177,14 @@ export default function MatchDetailsPage() {
     const relativePath = clipPath.split(/[/\\]/).slice(-2).join('/')
     const url = `http://localhost:9000/api/media/${matchId}/${relativePath}`
     window.open(url, '_blank')
+  }
+
+  const watchOriginalVideo = () => {
+    if (match?.video_path) {
+      const videoFileName = match.video_path.split(/[/\\]/).pop()
+      const url = `http://localhost:9000/api/media/${matchId}/${videoFileName}`
+      window.open(url, '_blank')
+    }
   }
 
   if (isLoading) {
@@ -237,6 +296,14 @@ export default function MatchDetailsPage() {
                   Re-analyze
                 </button>
               )}
+              <button
+                onClick={watchOriginalVideo}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/10 text-blue-500 border border-blue-500/20 rounded-lg font-medium hover:bg-blue-500/20 transition-all"
+                title="Watch original uploaded video"
+              >
+                <Video className="w-4 h-4" />
+                Original Video
+              </button>
               <button
                 onClick={handleDelete}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-destructive/10 text-destructive border border-destructive/20 rounded-lg font-medium hover:bg-destructive/20 transition-all"
@@ -410,6 +477,17 @@ export default function MatchDetailsPage() {
       </section>
 
       <SiteFooter />
+      
+      <ConfirmDialog
+        isOpen={dialog.isOpen}
+        onClose={() => setDialog({ ...dialog, isOpen: false })}
+        onConfirm={dialog.onConfirm}
+        type={dialog.type}
+        title={dialog.title}
+        message={dialog.message}
+        confirmText={dialog.type === "confirm" ? "Delete" : "OK"}
+        cancelText="Cancel"
+      />
     </main>
   )
 }

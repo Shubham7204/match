@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { SiteNav } from "@/components/site-nav"
 import { SiteFooter } from "@/components/footer"
-import { Play, Calendar, Loader2, AlertCircle, CheckCircle, Clock, Video } from "lucide-react"
+import { Play, Calendar, Loader2, AlertCircle, CheckCircle, Clock } from "lucide-react"
 
 interface Match {
   id: string
@@ -75,16 +75,6 @@ export default function MatchesPage() {
       return `http://localhost:9000/api/media/${match.match_id}/${match.poster_path.split('/').pop()}`
     }
     return "/placeholder.svg"
-  }
-
-  const getOriginalVideoUrl = (match: Match) => {
-    return `http://localhost:9000/api/media/${match.match_id}/original_video.mp4`
-  }
-
-  const handleWatchOriginal = (e: React.MouseEvent, match: Match) => {
-    e.preventDefault()
-    e.stopPropagation()
-    window.open(getOriginalVideoUrl(match), '_blank')
   }
 
   return (
@@ -210,19 +200,8 @@ export default function MatchesPage() {
                     </p>
                   )}
 
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs text-muted-foreground">
-                      Uploaded {new Date(match.created_at).toLocaleDateString()}
-                    </div>
-                    
-                    <button
-                      onClick={(e) => handleWatchOriginal(e, match)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-secondary/60 hover:bg-secondary text-foreground rounded-md transition-colors"
-                      title="Watch original uploaded video"
-                    >
-                      <Video className="w-3.5 h-3.5" />
-                      Original Video
-                    </button>
+                  <div className="text-xs text-muted-foreground">
+                    Uploaded {new Date(match.created_at).toLocaleDateString()}
                   </div>
                 </div>
               </Link>
