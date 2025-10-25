@@ -13,9 +13,10 @@ import whisper
 from rapidfuzz import fuzz
 import warnings
 warnings.filterwarnings('ignore')
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.concurrency import run_in_threadpool
 import shutil
 import subprocess
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -25,8 +26,11 @@ import os
 import shutil
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict, Tuple
 import uuid
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+import psutil
 
 app = FastAPI()
 
@@ -97,6 +101,207 @@ CONFIG = {
     'frame_skip': 3,
     'class_names': ['foul', 'goal', 'freekick', 'penalty', 'corner']
 }
+
+# ============================================================================
+# PROGRESS TRACKING
+# ============================================================================
+class ProgressTracker:
+    def __init__(self):
+        self.progress = {}
+        self.websockets = {}
+    
+    def update(self, match_id: str, status: str, progress: float, message: str = ""):
+        self.progress[match_id] = {
+            "status": status,
+            "progress": progress,
+            "message": message,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    
+    async def broadcast(self, match_id: str):
+        if match_id in self.websockets:
+            for ws in self.websockets[match_id]:
+                try:
+                    await ws.send_json(self.progress[match_id])
+                except:
+                    pass
+
+progress_tracker = ProgressTracker()
+
+# ============================================================================
+# CHUNKED VIDEO PROCESSOR
+# ============================================================================
+class ChunkedVideoProcessor:
+    """Process long videos in manageable chunks"""
+    
+    def __init__(self, config, chunk_duration_minutes=50):
+        self.config = config
+        self.chunk_duration = chunk_duration_minutes * 60  # Convert to seconds
+        self.max_memory_mb = 4000  # Maximum memory per chunk (4GB)
+    
+    def get_video_info(self, video_path: str) -> Dict:
+        """Get video metadata without loading frames"""
+        cap = cv2.VideoCapture(video_path)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        duration = total_frames / fps if fps > 0 else 0
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        cap.release()
+        
+        return {
+            'fps': fps,
+            'total_frames': total_frames,
+            'duration': duration,
+            'width': width,
+            'height': height
+        }
+    
+    def calculate_chunks(self, duration: float) -> List[Tuple[float, float]]:
+        """Calculate chunk time ranges"""
+        chunks = []
+        current_time = 0
+        
+        while current_time < duration:
+            end_time = min(current_time + self.chunk_duration, duration)
+            chunks.append((current_time, end_time))
+            current_time = end_time
+        
+        print(f"\n{'='*60}")
+        print(f"VIDEO CHUNKING STRATEGY")
+        print(f"{'='*60}")
+        print(f"Total duration: {duration/60:.1f} minutes")
+        print(f"Chunk size: {self.chunk_duration/60:.1f} minutes")
+        print(f"Number of chunks: {len(chunks)}")
+        print(f"{'='*60}\n")
+        
+        return chunks
+    
+    def process_chunk(
+        self, 
+        video_path: str, 
+        start_time: float, 
+        end_time: float,
+        chunk_idx: int,
+        total_chunks: int,
+        detector: 'RobustMultiModalDetector'
+    ) -> Tuple[List, List]:
+        """Process a single video chunk"""
+        
+        print(f"\n{'='*60}")
+        print(f"PROCESSING CHUNK {chunk_idx + 1}/{total_chunks}")
+        print(f"Time range: {start_time/60:.1f}m - {end_time/60:.1f}m")
+        print(f"{'='*60}")
+        
+        # Monitor memory
+        process = psutil.Process()
+        mem_before = process.memory_info().rss / 1024 / 1024  # MB
+        print(f"Memory before chunk: {mem_before:.1f} MB")
+        
+        cap = cv2.VideoCapture(video_path)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        
+        # Seek to start position
+        start_frame = int(start_time * fps)
+        end_frame = int(end_time * fps)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+        
+        model1_events = []
+        model2_events = []
+        
+        frame_buffer = []
+        frame_idx_buffer = []
+        current_frame = start_frame
+        
+        while current_frame < end_frame:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            
+            # Apply frame skip
+            if (current_frame - start_frame) % self.config['frame_skip'] == 0:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frame = cv2.resize(frame, (self.config['img_size'], self.config['img_size']))
+                frame_buffer.append(frame)
+                frame_idx_buffer.append(current_frame)
+            
+            # Process when buffer is full
+            if len(frame_buffer) >= self.config['num_frames'] * 3:
+                events_m1, events_m2 = detector._process_frame_chunk(
+                    frame_buffer, frame_idx_buffer, fps
+                )
+                model1_events.extend(events_m1)
+                model2_events.extend(events_m2)
+                
+                # Keep overlap
+                overlap = self.config['num_frames'] // 2
+                frame_buffer = frame_buffer[-overlap:]
+                frame_idx_buffer = frame_idx_buffer[-overlap:]
+                
+                # Memory check
+                mem_current = process.memory_info().rss / 1024 / 1024
+                if mem_current > self.max_memory_mb:
+                    print(f"⚠️ High memory usage: {mem_current:.1f} MB - forcing cleanup")
+                    gc.collect()
+                    if detector.device.type == 'cuda':
+                        torch.cuda.empty_cache()
+            
+            current_frame += 1
+            
+            # Progress update
+            chunk_progress = ((current_frame - start_frame) / (end_frame - start_frame)) * 100
+            if int(chunk_progress) % 10 == 0:
+                print(f"Chunk {chunk_idx + 1} progress: {chunk_progress:.1f}%", end='\r')
+        
+        # Process remaining frames
+        if len(frame_buffer) >= self.config['num_frames']:
+            events_m1, events_m2 = detector._process_frame_chunk(
+                frame_buffer, frame_idx_buffer, fps
+            )
+            model1_events.extend(events_m1)
+            model2_events.extend(events_m2)
+        
+        cap.release()
+        
+        # Aggressive cleanup
+        del frame_buffer, frame_idx_buffer
+        gc.collect()
+        if detector.device.type == 'cuda':
+            torch.cuda.empty_cache()
+        
+        mem_after = process.memory_info().rss / 1024 / 1024
+        print(f"\nMemory after chunk: {mem_after:.1f} MB (Δ {mem_after - mem_before:+.1f} MB)")
+        print(f"✓ Chunk {chunk_idx + 1} complete: M1={len(model1_events)}, M2={len(model2_events)}")
+        print(f"{'='*60}\n")
+        
+        return model1_events, model2_events
+    
+    def merge_chunk_events(self, all_events: List[List], overlap_time: float = 5.0) -> List:
+        """Merge events from multiple chunks, removing duplicates at boundaries"""
+        if not all_events:
+            return []
+        
+        merged = []
+        
+        for chunk_events in all_events:
+            if not merged:
+                merged.extend(chunk_events)
+                continue
+            
+            # Check for overlapping events at chunk boundary
+            for event in chunk_events:
+                # Skip if too close to last event from previous chunk
+                is_duplicate = False
+                for existing in merged[-10:]:  # Only check recent events
+                    if (event['event_name'] == existing['event_name'] and
+                        abs(event['timestamp'] - existing['timestamp']) < overlap_time):
+                        is_duplicate = True
+                        break
+                
+                if not is_duplicate:
+                    merged.append(event)
+        
+        return merged
 
 # ============================================================================
 # FOOTBALL EVENT SEQUENCE RULES (UPDATED WITH CAUSALITY PROTECTION)
@@ -1013,6 +1218,9 @@ class MultimodalFusionEngine:
             print(f"Audio-only events found: {len(audio_only_events)}")
             verified_events.extend(audio_only_events)
 
+        # Filter out any None values before processing
+        verified_events = [e for e in verified_events if e is not None]
+        
         # Filter replays and duplicates
         verified_events = self._filter_replays_and_select_primary(verified_events)
 
@@ -1038,6 +1246,12 @@ class MultimodalFusionEngine:
         if not events:
             return []
 
+        # Filter out None values from the events list
+        events = [e for e in events if e is not None]
+        
+        if not events:
+            return []
+
         print(f"\n{'='*60}")
         print("FILTERING REPLAYS & DUPLICATES (STRICT MODE)")
         print(f"{'='*60}")
@@ -1046,6 +1260,11 @@ class MultimodalFusionEngine:
         filtered_events = []
 
         for event in events:
+            # Safety check - skip if event is None or invalid
+            if not event or not isinstance(event, dict):
+                print(f" ⚠️ Skipping invalid event: {event}")
+                continue
+                
             is_replay = event.get('is_replay', False)
 
             # Skip strong replays
@@ -1055,18 +1274,25 @@ class MultimodalFusionEngine:
 
             # Check for duplicate events (same type, close in time)
             duplicate = False
-            for existing in filtered_events:
+            replace_index = -1
+            
+            for idx, existing in enumerate(filtered_events):
+                # Safety check for existing event
+                if not existing or not isinstance(existing, dict):
+                    continue
+                    
                 time_diff = abs(event['timestamp'] - existing['timestamp'])
 
                 if (event['final_event'] == existing['final_event'] and
                     time_diff < self.config['min_event_gap']):
 
                     # Keep the one with better audio evidence
-                    event_audio_score = event.get('audio_analysis', {}).get('total_matches', 0)
-                    existing_audio_score = existing.get('audio_analysis', {}).get('total_matches', 0)
+                    # audio_analysis may be None; guard by falling back to empty dict
+                    event_audio_score = (event.get('audio_analysis') or {}).get('total_matches', 0)
+                    existing_audio_score = (existing.get('audio_analysis') or {}).get('total_matches', 0)
 
                     if event_audio_score > existing_audio_score:
-                        filtered_events.remove(existing)
+                        replace_index = idx
                         print(f" ⚠ Replacing with better audio: "
                               f"{existing['timestamp']}s → {event['timestamp']}s "
                               f"(audio: {existing_audio_score} → {event_audio_score})")
@@ -1076,7 +1302,10 @@ class MultimodalFusionEngine:
                         print(f" 🚫 Skipping duplicate (weaker audio): {event['timestamp']}s")
                         break
 
-            if not duplicate:
+            # Replace if we found a better event
+            if replace_index >= 0:
+                filtered_events[replace_index] = event
+            elif not duplicate:
                 # Remove replay flag for primary events
                 if is_replay:
                     event['is_replay'] = False
@@ -1553,6 +1782,95 @@ class RobustMultiModalDetector:
         print(f"\n✓ Saved to: {self.config['output_final_json']}")
         print(f"{'='*60}\n")
 
+    def process_video_chunked(
+        self, 
+        video_path: str,
+        match_id: str = None,
+        progress_callback = None
+    ):
+        """Process video in chunks for long videos"""
+        
+        # Create chunked processor
+        chunked_processor = ChunkedVideoProcessor(self.config, chunk_duration_minutes=50)
+        
+        # Get video info
+        video_info = chunked_processor.get_video_info(video_path)
+        print(f"\n{'='*60}")
+        print(f"VIDEO INFORMATION")
+        print(f"{'='*60}")
+        print(f"Duration: {video_info['duration']/60:.1f} minutes")
+        print(f"FPS: {video_info['fps']:.2f}")
+        print(f"Resolution: {video_info['width']}x{video_info['height']}")
+        print(f"Total frames: {video_info['total_frames']:,}")
+        print(f"{'='*60}\n")
+        
+        # Decide processing strategy
+        if video_info['duration'] < 3000:  # Less than 50 minutes
+            print("✓ Video is short - using standard processing")
+            return self.process_video_with_both_models(video_path)
+        
+        # Use chunked processing for long videos
+        print("✓ Video is long - using chunked processing")
+        chunks = chunked_processor.calculate_chunks(video_info['duration'])
+        
+        all_model1_events = []
+        all_model2_events = []
+        
+        for idx, (start_time, end_time) in enumerate(chunks):
+            # Update progress
+            if progress_callback:
+                progress = (idx / len(chunks)) * 70  # Reserve 70% for video processing
+                progress_callback(
+                    status="processing",
+                    progress=progress,
+                    message=f"Processing chunk {idx + 1}/{len(chunks)}"
+                )
+            
+            # Process chunk
+            m1_events, m2_events = chunked_processor.process_chunk(
+                video_path, start_time, end_time, idx, len(chunks), self
+            )
+            
+            all_model1_events.append(m1_events)
+            all_model2_events.append(m2_events)
+            
+            # Save intermediate results
+            if match_id and idx % 2 == 0:  # Save every 2 chunks
+                self._save_intermediate_results(
+                    match_id, all_model1_events, all_model2_events, idx, len(chunks)
+                )
+        
+        # Merge all chunk events
+        print(f"\n{'='*60}")
+        print("MERGING CHUNK RESULTS")
+        print(f"{'='*60}")
+        
+        model1_events = chunked_processor.merge_chunk_events(all_model1_events)
+        model2_events = chunked_processor.merge_chunk_events(all_model2_events)
+        
+        print(f"✓ Total Model 1 events: {len(model1_events)}")
+        print(f"✓ Total Model 2 events: {len(model2_events)}")
+        print(f"{'='*60}\n")
+        
+        return model1_events, model2_events, video_info['fps']
+    
+    def _save_intermediate_results(self, match_id, m1_events, m2_events, chunk_idx, total_chunks):
+        """Save intermediate results to prevent data loss"""
+        checkpoint_path = BASE_MEDIA_DIR / match_id / f"checkpoint_{chunk_idx}.json"
+        
+        checkpoint_data = {
+            'chunk': chunk_idx,
+            'total_chunks': total_chunks,
+            'model1_events': sum(len(e) for e in m1_events),
+            'model2_events': sum(len(e) for e in m2_events),
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        
+        with open(checkpoint_path, 'w') as f:
+            json.dump(checkpoint_data, f, indent=2)
+        
+        print(f"✓ Checkpoint saved: {checkpoint_path.name}")
+
 # ============================================================================
 # MAIN EXECUTION
 # ============================================================================
@@ -1714,10 +2032,26 @@ async def upload_match(
             "error": str(e)
         }, status_code=500)
 
+@app.websocket("/ws/progress/{match_id}")
+async def websocket_progress(websocket: WebSocket, match_id: str):
+    """WebSocket endpoint for real-time progress updates"""
+    await websocket.accept()
+    
+    if match_id not in progress_tracker.websockets:
+        progress_tracker.websockets[match_id] = []
+    progress_tracker.websockets[match_id].append(websocket)
+    
+    try:
+        while True:
+            # Keep connection alive
+            await asyncio.sleep(1)
+    except WebSocketDisconnect:
+        progress_tracker.websockets[match_id].remove(websocket)
+
 @app.post("/api/matches/{match_id}/analyze")
 async def analyze_match(match_id: str):
     """
-    Trigger AI analysis for a specific match
+    Trigger AI analysis for a specific match (OPTIMIZED FOR LONG VIDEOS)
     """
     try:
         # Find match in database
@@ -1730,114 +2064,251 @@ async def analyze_match(match_id: str):
             {"match_id": match_id},
             {"$set": {"status": "processing", "updated_at": datetime.utcnow()}}
         )
+        
+        # Create a queue for progress updates
+        import queue
+        progress_queue = queue.Queue()
+        
+        # Run analysis in thread pool to avoid blocking
+        def run_analysis():
+            try:
+                video_path = match["video_path"]
+                match_dir = Path(video_path).parent
+                clips_dir = match_dir / "clips"
+                clips_dir.mkdir(exist_ok=True)
 
-        # Get video path
-        video_path = match["video_path"]
-        match_dir = Path(video_path).parent
-        clips_dir = match_dir / "clips"
-        clips_dir.mkdir(exist_ok=True)
+                # Update CONFIG
+                CONFIG['video_path'] = video_path
+                CONFIG['output_final_json'] = str(match_dir / "analysis_result.json")
 
-        # Update CONFIG for this match
-        CONFIG['video_path'] = video_path
-        CONFIG['output_final_json'] = str(match_dir / "analysis_result.json")
+                # Initialize detector
+                detector = RobustMultiModalDetector(CONFIG)
 
-        # Run AI detection (your existing code)
-        verified_events = run_robust_detection()
+                # Progress callback that puts updates in queue
+                def sync_progress_update(**kwargs):
+                    progress_queue.put(kwargs)
 
-        # Load analysis results
-        with open(CONFIG['output_final_json'], "r") as f:
-            analysis_data = json.load(f)
+                # If raw detections already exist, reuse them to avoid re-running video inference
+                raw_json_path = match_dir / CONFIG['output_final_json'].replace('.json', '_raw_detections.json')
+                if raw_json_path.exists():
+                    try:
+                        with open(raw_json_path, 'r') as f:
+                            raw = json.load(f)
+                        model1_events = raw.get('model1_detections', {}).get('events', [])
+                        model2_events = raw.get('model2_detections', {}).get('events', [])
+                        fps = raw.get('video_info', {}).get('fps', 30)
+                        progress_queue.put({"status": "processing", "progress": 20, "message": "Loaded raw detections - skipping video inference"})
+                    except Exception as e:
+                        # If loading fails, fall back to full processing
+                        progress_queue.put({"status": "processing", "progress": 5, "message": "Analyzing video structure"})
+                        model1_events, model2_events, fps = detector.process_video_chunked(
+                            video_path,
+                            match_id=match_id,
+                            progress_callback=sync_progress_update
+                        )
+                else:
+                    progress_queue.put({"status": "processing", "progress": 5, "message": "Analyzing video structure"})
+                    # Use chunked processing for long videos
+                    model1_events, model2_events, fps = detector.process_video_chunked(
+                        video_path,
+                        match_id=match_id,
+                        progress_callback=sync_progress_update
+                    )
+                
+                # Save raw detections
+                progress_queue.put({"status": "processing", "progress": 75, "message": "Saving detections"})
+                detector.save_raw_detections(model1_events, model2_events, fps)
+                
+                # Audio transcription
+                progress_queue.put({"status": "processing", "progress": 80, "message": "Transcribing audio"})
+                transcription = detector.audio_analyzer.transcribe_video(video_path)
+                
+                # Fusion and verification
+                progress_queue.put({"status": "processing", "progress": 85, "message": "Verifying events"})
+                verified_events = detector.fusion_engine.fuse_detections(
+                    model1_events, model2_events, transcription, detector.audio_analyzer
+                )
+                
+                # Save final results
+                detector.save_final_results(verified_events, fps)
+                
+                # Load analysis results
+                with open(CONFIG['output_final_json'], "r") as f:
+                    analysis_data = json.load(f)
+                
+                # Create clips
+                progress_queue.put({"status": "processing", "progress": 90, "message": "Creating clips"})
+                event_clips = {}
+                clip_counter = {}
+                ts_paths = []
 
-        # Create clips (your existing code with modifications)
-        event_clips = {}
-        clip_counter = {}
-        ts_paths = []
+                for event in analysis_data['verified_events']:
+                    event_type = event['event_type']
+                    clip_counter[event_type] = clip_counter.get(event_type, 0) + 1
 
-        for event in analysis_data['verified_events']:
-            event_type = event['event_type']
-            clip_counter[event_type] = clip_counter.get(event_type, 0) + 1
+                    clip_name = f"highlight_{event_type}{clip_counter[event_type]}.mp4"
+                    output_path = clips_dir / clip_name
 
-            clip_name = f"highlight_{event_type}{clip_counter[event_type]}.mp4"
-            output_path = clips_dir / clip_name
+                    start = event['trim_window']['start']
+                    end = event['trim_window']['end']
 
-            start = event['trim_window']['start']
-            end = event['trim_window']['end']
+                    # Create clip
+                    cmd = [
+                        "ffmpeg", "-loglevel", "error",
+                        "-i", video_path,
+                        "-ss", str(start), "-to", str(end),
+                        "-c:v", "libx264", "-c:a", "aac",
+                        "-preset", "fast", "-pix_fmt", "yuv420p",
+                        "-movflags", "+faststart",
+                        "-y", str(output_path)
+                    ]
+                    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-            # Create clip (ffmpeg command)
-            cmd = [
-                "ffmpeg", "-loglevel", "error",
-                "-i", video_path,
-                "-ss", str(start), "-to", str(end),
-                "-c:v", "libx264", "-c:a", "aac",
-                "-preset", "fast", "-pix_fmt", "yuv420p",
-                "-movflags", "+faststart",
-                "-y", str(output_path)
-            ]
-            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    # Create TS intermediate
+                    ts_path = output_path.with_suffix('.ts')
+                    cmd_ts = [
+                        "ffmpeg", "-loglevel", "error",
+                        "-i", str(output_path),
+                        "-c", "copy", "-bsf:v", "h264_mp4toannexb",
+                        "-f", "mpegts", "-y", str(ts_path)
+                    ]
+                    subprocess.run(cmd_ts, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-            # Create TS intermediate
-            ts_path = output_path.with_suffix('.ts')
-            cmd_ts = [
-                "ffmpeg", "-loglevel", "error",
-                "-i", str(output_path),
-                "-c", "copy", "-bsf:v", "h264_mp4toannexb",
-                "-f", "mpegts", "-y", str(ts_path)
-            ]
-            subprocess.run(cmd_ts, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    if event_type not in event_clips:
+                        event_clips[event_type] = []
+                    event_clips[event_type].append(str(output_path))
+                    ts_paths.append(str(ts_path))
 
-            # Store clip path
-            if event_type not in event_clips:
-                event_clips[event_type] = []
-            event_clips[event_type].append(str(output_path))
-            ts_paths.append(str(ts_path))
+                # Create main highlights
+                progress_queue.put({"status": "processing", "progress": 95, "message": "Creating main highlights"})
+                main_highlights_path = None
+                if ts_paths:
+                    merge_list_path = match_dir / "merge_ts.txt"
+                    with open(merge_list_path, "w") as f:
+                        for ts in ts_paths:
+                            abs_path = Path(ts).absolute().as_posix()
+                            f.write(f"file '{abs_path}'\n")
 
-        # Create main highlights
-        main_highlights_path = None
-        if ts_paths:
-            merge_list_path = match_dir / "merge_ts.txt"
-            with open(merge_list_path, "w") as f:
-                for ts in ts_paths:
-                    abs_path = Path(ts).absolute().as_posix()
-                    f.write(f"file '{abs_path}'\n")
+                    main_highlights_path = clips_dir / "main_highlights.mp4"
+                    cmd = [
+                        "ffmpeg", "-loglevel", "error",
+                        "-f", "concat", "-safe", "0",
+                        "-i", str(merge_list_path),
+                        "-c", "copy", "-bsf:a", "aac_adtstoasc",
+                        "-y", str(main_highlights_path)
+                    ]
+                    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-            main_highlights_path = clips_dir / "main_highlights.mp4"
-            cmd = [
-                "ffmpeg", "-loglevel", "error",
-                "-f", "concat", "-safe", "0",
-                "-i", str(merge_list_path),
-                "-c", "copy", "-bsf:a", "aac_adtstoasc",
-                "-y", str(main_highlights_path)
-            ]
-            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    merge_list_path.unlink(missing_ok=True)
+                    for ts in ts_paths:
+                        Path(ts).unlink(missing_ok=True)
 
-            # Cleanup
-            merge_list_path.unlink(missing_ok=True)
-            for ts in ts_paths:
-                Path(ts).unlink(missing_ok=True)
-
-        # Update match in database
+                progress_queue.put({"status": "completed", "progress": 100, "message": "Analysis complete"})
+                
+                return {
+                    "success": True,
+                    "main_highlights": str(main_highlights_path) if main_highlights_path else None,
+                    "event_clips": event_clips,
+                    "analysis_data": analysis_data
+                }
+                
+            except Exception as e:
+                import traceback
+                error_msg = f"Error in analysis: {str(e)}\n{traceback.format_exc()}"
+                print(error_msg)
+                progress_queue.put({"status": "failed", "progress": 0, "message": str(e)})
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "traceback": traceback.format_exc()
+                }
+        
+        # Start background task for processing updates
+        async def process_progress_updates():
+            while True:
+                try:
+                    # Get progress update from queue (non-blocking)
+                    update = progress_queue.get_nowait()
+                    
+                    # Update tracker and broadcast
+                    progress_tracker.update(
+                        match_id, 
+                        update.get("status", "processing"), 
+                        update.get("progress", 0), 
+                        update.get("message", "")
+                    )
+                    await progress_tracker.broadcast(match_id)
+                    await matches_collection.update_one(
+                        {"match_id": match_id},
+                        {"$set": {
+                            "progress": update.get("progress", 0), 
+                            "progress_message": update.get("message", "")
+                        }}
+                    )
+                except queue.Empty:
+                    # No more updates, wait a bit
+                    await asyncio.sleep(0.5)
+                except Exception as e:
+                    print(f"Error processing progress update: {e}")
+                    break
+        
+        # Start the progress updater task
+        progress_task = asyncio.create_task(process_progress_updates())
+        
+        # Run analysis in background
+        try:
+            result = await run_in_threadpool(run_analysis)
+        except Exception as e:
+            # Cancel progress task on error
+            progress_task.cancel()
+            try:
+                await progress_task
+            except asyncio.CancelledError:
+                pass
+            raise e
+        
+        # Cancel progress task
+        progress_task.cancel()
+        try:
+            await progress_task
+        except asyncio.CancelledError:
+            pass
+        
+        # Validate result
+        if result is None:
+            raise Exception("Analysis returned None")
+        
+        if not isinstance(result, dict):
+            raise Exception(f"Analysis returned invalid type: {type(result)}")
+        
+        if not result.get("success", False):
+            error_msg = result.get("error", "Unknown error occurred")
+            traceback_info = result.get("traceback", "")
+            if traceback_info:
+                print(f"Analysis failed with traceback:\n{traceback_info}")
+            raise Exception(error_msg)
+        
+        # Update database
         await matches_collection.update_one(
             {"match_id": match_id},
             {
                 "$set": {
                     "status": "completed",
-                    "main_highlights": str(main_highlights_path) if main_highlights_path else None,
-                    "event_clips": event_clips,
-                    "analysis_data": analysis_data,
+                    "main_highlights": result.get("main_highlights"),
+                    "event_clips": result.get("event_clips", {}),
+                    "analysis_data": result.get("analysis_data", {}),
                     "updated_at": datetime.utcnow()
                 }
             }
         )
 
-        return JSONResponse(content={
-            "success": True,
-            "message": "Analysis complete",
-            "main_highlights": str(main_highlights_path) if main_highlights_path else None,
-            "event_clips": event_clips
-        })
+        return JSONResponse(content=result)
 
     except Exception as e:
-        # Update status to failed
+        # Update progress with error
+        progress_tracker.update(match_id, "failed", 0, str(e))
+        await progress_tracker.broadcast(match_id)
+        
         await matches_collection.update_one(
             {"match_id": match_id},
             {"$set": {"status": "failed", "updated_at": datetime.utcnow()}}
@@ -1846,6 +2317,23 @@ async def analyze_match(match_id: str):
             "success": False,
             "error": str(e)
         }, status_code=500)
+
+@app.get("/api/matches/{match_id}/progress")
+async def get_progress(match_id: str):
+    """Get current analysis progress"""
+    if match_id in progress_tracker.progress:
+        return JSONResponse(content=progress_tracker.progress[match_id])
+    
+    # Fallback to database
+    match = await matches_collection.find_one({"match_id": match_id})
+    if match:
+        return JSONResponse(content={
+            "status": match.get("status", "unknown"),
+            "progress": match.get("progress", 0),
+            "message": match.get("progress_message", "")
+        })
+    
+    raise HTTPException(status_code=404, detail="Match not found")
 
 @app.get("/api/matches")
 async def get_all_matches(

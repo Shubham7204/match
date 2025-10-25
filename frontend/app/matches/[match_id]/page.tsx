@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { SiteNav } from "@/components/site-nav"
 import { SiteFooter } from "@/components/footer"
@@ -30,6 +30,13 @@ interface Match {
   updated_at: string
 }
 
+interface ProgressUpdate {
+  status: string
+  progress: number
+  message: string
+  timestamp: string
+}
+
 export default function MatchDetailsPage() {
   const params = useParams()
   const router = useRouter()
@@ -41,6 +48,8 @@ export default function MatchDetailsPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [selectedClipType, setSelectedClipType] = useState<string>("main")
   const [currentVideoUrl, setCurrentVideoUrl] = useState<string>("")
+  const [progressData, setProgressData] = useState<ProgressUpdate | null>(null)
+  const wsRef = useRef<WebSocket | null>(null)
   const [dialog, setDialog] = useState<{
     isOpen: boolean
     type: "success" | "error" | "warning" | "info" | "confirm"
@@ -56,7 +65,52 @@ export default function MatchDetailsPage() {
 
   useEffect(() => {
     fetchMatchDetails()
+    return () => {
+      // Cleanup WebSocket on unmount
+      if (wsRef.current) {
+        wsRef.current.close()
+      }
+    }
   }, [matchId])
+
+  const connectWebSocket = () => {
+    // Close existing connection
+    if (wsRef.current) {
+      wsRef.current.close()
+    }
+
+    // Create new WebSocket connection
+    const ws = new WebSocket(`ws://localhost:9000/ws/progress/${matchId}`)
+    
+    ws.onopen = () => {
+      console.log("WebSocket connected")
+    }
+    
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data) as ProgressUpdate
+      setProgressData(data)
+      
+      // If analysis is complete or failed, refresh match details
+      if (data.status === "completed" || data.status === "failed") {
+        setTimeout(() => {
+          fetchMatchDetails()
+          setIsAnalyzing(false)
+          setProgressData(null)
+          if (ws) ws.close()
+        }, 2000)
+      }
+    }
+    
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error)
+    }
+    
+    ws.onclose = () => {
+      console.log("WebSocket disconnected")
+    }
+    
+    wsRef.current = ws
+  }
 
   const fetchMatchDetails = async () => {
     setIsLoading(true)
@@ -87,6 +141,11 @@ export default function MatchDetailsPage() {
     if (!match || match.status === "processing") return
 
     setIsAnalyzing(true)
+    setProgressData({ status: "starting", progress: 0, message: "Initializing analysis...", timestamp: new Date().toISOString() })
+    
+    // Connect to WebSocket for real-time updates
+    connectWebSocket()
+
     try {
       const response = await fetch(`http://localhost:9000/api/matches/${matchId}/analyze`, {
         method: "POST",
@@ -263,6 +322,12 @@ export default function MatchDetailsPage() {
                     Completed
                   </span>
                 )}
+                {match.status === "failed" && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-red-500/10 text-red-500 border-red-500/20">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    Failed
+                  </span>
+                )}
               </div>
             </div>
 
@@ -286,7 +351,7 @@ export default function MatchDetailsPage() {
                   )}
                 </button>
               )}
-              {match.status === "completed" && (
+              {(match.status === "completed" || match.status === "failed") && (
                 <button
                   onClick={handleAnalyze}
                   disabled={isAnalyzing}
@@ -316,6 +381,47 @@ export default function MatchDetailsPage() {
 
           {match.description && (
             <p className="text-muted-foreground mt-4 max-w-3xl">{match.description}</p>
+          )}
+
+          {/* Real-time Progress Bar */}
+          {progressData && isAnalyzing && (
+            <div className="mt-6 bg-card border border-border/60 rounded-xl overflow-hidden">
+              <div className="p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">Processing Video</h3>
+                      <p className="text-sm text-muted-foreground">{progressData.message || "Initializing..."}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-primary">{progressData.progress.toFixed(0)}%</div>
+                    <div className="text-xs text-muted-foreground">Complete</div>
+                  </div>
+                </div>
+                
+                <div className="relative w-full h-2.5 bg-secondary/30 rounded-full overflow-hidden">
+                  <div 
+                    className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 transition-all duration-700 ease-out rounded-full"
+                    style={{ width: `${progressData.progress}%` }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
+                  </div>
+                </div>
+                
+                {progressData.status === "processing" && progressData.progress > 0 && progressData.progress < 70 && (
+                  <div className="flex items-start gap-2 p-3 bg-blue-500/5 border border-blue-500/10 rounded-lg">
+                    <div className="text-blue-500 text-lg">💡</div>
+                    <p className="text-sm text-muted-foreground flex-1">
+                      Processing long videos in <span className="font-medium text-foreground">50-minute chunks</span> for optimal performance and memory efficiency.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </section>
