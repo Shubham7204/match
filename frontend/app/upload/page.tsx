@@ -140,6 +140,7 @@ export default function UploadPage() {
               <input
                 name="date"
                 type="date"
+                max={new Date().toISOString().split('T')[0]}
                 className="w-full rounded-lg border border-border/60 bg-card/40 px-4 py-3 text-sm transition-all focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
                 required
                 disabled={isUploading}

@@ -99,7 +99,7 @@ class VideoRAGQuerier:
         """Setup Gemini AI API"""
         try:
             genai.configure(api_key=GEMINI_API_KEY)
-            self.gemini_model = genai.GenerativeModel('gemini-2.0-flash-exp')
+            self.gemini_model = genai.GenerativeModel('gemini-3-pro-preview')
             print("Gemini 2.0 Flash configured successfully\n")
         except Exception as e:
             print(f"Gemini setup failed: {e}")
