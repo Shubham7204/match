@@ -1,0 +1,292 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "KhelIQ - AI Football Highlights",
+    "languages": ["python", "typescript", "css"],
+    "frameworks": ["Next.js", "React", "FastAPI", "Tailwind CSS", "Radix UI", "Swin Transformer", "FAISS"],
+    "description": "An AI-powered football highlight generation platform with a Next.js frontend and Python FastAPI backend. Uses Swin Transformer models for multimodal video analysis, Whisper for audio transcription, and Gemini AI for commentary generation. Features RAG-based querying, live HLS streaming with real-time highlight detection, and automatic video clip generation.",
+    "analyzedAt": "2026-03-24T12:00:00Z",
+    "gitCommitHash": "12fc13344fb484a6c78240c81e35ea2b084445d5"
+  },
+  "nodes": [
+    {"id": "file:backend/app.py", "type": "file", "name": "app.py", "filePath": "backend/app.py", "summary": "Main FastAPI application serving video analysis API. Contains VideoRAGQuerier class with event deduplication, Gemini AI integration, commentary support, and video clip generation via ffmpeg.", "tags": ["api", "fastapi", "video-analysis", "entry-point", "football", "gemini"], "complexity": "complex"},
+    {"id": "file:backend/hybrid_rag.py", "type": "file", "name": "hybrid_rag.py", "filePath": "backend/hybrid_rag.py", "summary": "Hybrid Football Video Analysis System combining time-based indexing for precise temporal queries and FAISS semantic search for content-based queries. Implements intelligent query routing between temporal and semantic search methods with Gemini AI analysis.", "tags": ["rag", "faiss", "semantic-search", "video-analysis", "hybrid-search", "football"], "complexity": "complex"},
+    {"id": "file:backend/rag_query_helper.py", "type": "file", "name": "rag_query_helper.py", "filePath": "backend/rag_query_helper.py", "summary": "Video RAG Query Helper with event deduplication and natural language query processing. Supports question answering and narrative generation for football events.", "tags": ["rag", "video-analysis", "gemini", "natural-language", "football", "cli"], "complexity": "complex"},
+    {"id": "file:backend/enhanced_rag_query_helper.py", "type": "file", "name": "enhanced_rag_query_helper.py", "filePath": "backend/enhanced_rag_query_helper.py", "summary": "Smart Football Video RAG Query Helper with rule-based deduplication (no extra API calls). Implements intelligent goal deduplication using 30-second windows, celebration detection, and replay filtering.", "tags": ["rag", "video-analysis", "deduplication", "gemini", "football", "optimized"], "complexity": "complex"},
+    {"id": "file:backend/generator/app.py", "type": "file", "name": "app.py", "filePath": "backend/generator/app.py", "summary": "FastAPI-based multimodal football event detection system with video analysis, audio transcription using Whisper, and AI-powered commentary verification. Includes PyTorch Swin Transformer models and automatic video clip generation.", "tags": ["fastapi", "pytorch", "video-analysis", "audio-transcription", "whisper", "swin-transformer", "multimodal", "football-events", "ffmpeg"], "complexity": "complex"},
+    {"id": "file:backend/generator/app2.py", "type": "file", "name": "app2.py", "filePath": "backend/generator/app2.py", "summary": "Enhanced version of the football event detection system with MongoDB integration, WebSocket progress tracking, chunked video processing for long videos, and RESTful API endpoints for match management.", "tags": ["fastapi", "mongodb", "websocket", "chunked-processing", "video-analysis", "rest-api", "async"], "complexity": "complex"},
+    {"id": "file:backend/process_video_segments.py", "type": "file", "name": "process_video_segments.py", "filePath": "backend/process_video_segments.py", "summary": "Video segment processor that adds global timestamps to frame data, optimizes structure for RAG systems, creates searchable event indexes, and processes batch JSON files with temporal mapping.", "tags": ["video-processing", "rag", "timestamp-calculation", "json-processing", "event-indexing", "batch-processing"], "complexity": "moderate"},
+    {"id": "file:backend/config.py", "type": "file", "name": "config.py", "filePath": "backend/config.py", "summary": "Simple configuration file containing the Gemini API key for Google Gemini integration.", "tags": ["config", "api-key", "gemini"], "complexity": "simple"},
+    {"id": "file:backend/hls/live_app.py", "type": "file", "name": "live_app.py", "filePath": "backend/hls/live_app.py", "summary": "FastAPI live HLS highlight generation service on port 8500. Provides endpoints to start/stop live analysis sessions, WebSocket real-time progress events, and ML-based highlight detection from HLS streams.", "tags": ["streaming", "hls", "live", "fastapi", "ml", "websocket", "asyncio"], "complexity": "complex"},
+    {"id": "file:backend/hls/live_models.py", "type": "file", "name": "live_models.py", "filePath": "backend/hls/live_models.py", "summary": "Singleton loader for RobustMultiModalDetector. Loads ML models from generator/ once at process startup and reuses across all live sessions.", "tags": ["streaming", "hls", "live", "ml", "singleton", "model-loading"], "complexity": "moderate"},
+    {"id": "file:backend/hls/live_session.py", "type": "file", "name": "live_session.py", "filePath": "backend/hls/live_session.py", "summary": "MongoDB helpers and dataclasses for live HLS analysis sessions. Defines LiveSession and LiveEvent dataclasses with async CRUD operations.", "tags": ["streaming", "hls", "live", "mongodb", "dataclass", "crud"], "complexity": "moderate"},
+    {"id": "file:backend/hls/live_simulator.py", "type": "file", "name": "live_simulator.py", "filePath": "backend/hls/live_simulator.py", "summary": "Simulates a live HLS stream using existing pre-segmented VOD content. FastAPI app on port 8600 serves VOD segments as if they are live.", "tags": ["streaming", "hls", "live", "simulator", "fastapi", "vod"], "complexity": "moderate"},
+    {"id": "file:backend/hls/main.py", "type": "file", "name": "main.py", "filePath": "backend/hls/main.py", "summary": "HLS main entry point - FastAPI app for video upload and HLS streaming. Provides endpoints to upload videos, convert to multi-bitrate HLS using FFmpeg.", "tags": ["streaming", "hls", "live", "fastapi", "upload", "ffmpeg"], "complexity": "moderate"},
+    {"id": "file:backend/hls/utils/converter.py", "type": "file", "name": "converter.py", "filePath": "backend/hls/utils/converter.py", "summary": "HLS conversion utilities using FFmpeg. Provides convert_to_hls_multi for creating multi-bitrate HLS streams and clip extraction functions.", "tags": ["streaming", "hls", "live", "ffmpeg", "converter", "video-processing"], "complexity": "moderate"},
+    {"id": "file:frontend/app/page.tsx", "type": "file", "name": "page.tsx", "filePath": "frontend/app/page.tsx", "summary": "Main landing page assembling marketing sections including Hero, Problem, Solution, Features, Technology, Benefits, About, and CTA sections with navigation and footer.", "tags": ["nextjs", "page", "route", "landing", "marketing"], "complexity": "simple"},
+    {"id": "file:frontend/app/layout.tsx", "type": "file", "name": "layout.tsx", "filePath": "frontend/app/layout.tsx", "summary": "Root layout with Poppins and GeistMono fonts, dark theme, Vercel Analytics, and Suspense boundary for the application.", "tags": ["nextjs", "layout", "root", "font", "theme", "analytics"], "complexity": "simple"},
+    {"id": "file:frontend/app/chat/page.tsx", "type": "file", "name": "page.tsx", "filePath": "frontend/app/chat/page.tsx", "summary": "Chat interface for querying match events with AI analysis. Features message history, video dialogs, frame detail modals, and URL fixing utilities for backend integration.", "tags": ["nextjs", "page", "route", "chat", "ai", "websocket", "dialog"], "complexity": "complex"},
+    {"id": "file:frontend/app/chat/components/AnalysisDisplay.tsx", "type": "file", "name": "AnalysisDisplay.tsx", "filePath": "frontend/app/chat/components/AnalysisDisplay.tsx", "summary": "Displays AI analysis results with video thumbnails, event details, commentary timeline, and frame-by-frame analysis. Supports single events and multiple event grids.", "tags": ["nextjs", "component", "analysis", "video", "collapsible", "grid"], "complexity": "complex"},
+    {"id": "file:frontend/app/matches/page.tsx", "type": "file", "name": "page.tsx", "filePath": "frontend/app/matches/page.tsx", "summary": "Matches listing page with status filter tabs, grid view of match cards with posters, and navigation to individual match details.", "tags": ["nextjs", "page", "route", "matches", "list", "filter", "grid"], "complexity": "moderate"},
+    {"id": "file:frontend/app/matches/[match_id]/page.tsx", "type": "file", "name": "page.tsx", "filePath": "frontend/app/matches/[match_id]/page.tsx", "summary": "Individual match detail page with video player, WebSocket progress tracking, event statistics, timeline, clip sidebar with play/download, and match management.", "tags": ["nextjs", "page", "route", "dynamic", "video", "websocket", "player"], "complexity": "complex"},
+    {"id": "file:frontend/app/upload/page.tsx", "type": "file", "name": "page.tsx", "filePath": "frontend/app/upload/page.tsx", "summary": "Video upload page with form for match title, date, video file, poster image, and description. Features upload progress, preview, and confirmation dialogs.", "tags": ["nextjs", "page", "route", "upload", "form", "video"], "complexity": "moderate"},
+    {"id": "file:frontend/app/live/page.tsx", "type": "file", "name": "page.tsx", "filePath": "frontend/app/live/page.tsx", "summary": "Live streaming page for real-time highlight detection from HLS streams. Features WebSocket connection, activity log, live stats, clips gallery, and past sessions management.", "tags": ["nextjs", "page", "route", "live", "streaming", "websocket", "hls", "real-time"], "complexity": "complex"},
+    {"id": "file:frontend/components/site-nav.tsx", "type": "file", "name": "site-nav.tsx", "filePath": "frontend/components/site-nav.tsx", "summary": "Site navigation component with logo and navigation links.", "tags": ["component", "ui", "react", "navigation"], "complexity": "simple"},
+    {"id": "file:frontend/components/hero-section.tsx", "type": "file", "name": "hero-section.tsx", "filePath": "frontend/components/hero-section.tsx", "summary": "Hero section component with call-to-action buttons and branding.", "tags": ["component", "ui", "react", "hero"], "complexity": "simple"},
+    {"id": "file:frontend/components/hero-placeholder.tsx", "type": "file", "name": "hero-placeholder.tsx", "filePath": "frontend/components/hero-placeholder.tsx", "summary": "Hero placeholder component with background image and primary CTAs.", "tags": ["component", "ui", "react", "hero"], "complexity": "simple"},
+    {"id": "file:frontend/components/content-card.tsx", "type": "file", "name": "content-card.tsx", "filePath": "frontend/components/content-card.tsx", "summary": "Reusable content card component for displaying media content.", "tags": ["component", "ui", "react", "card"], "complexity": "simple"},
+    {"id": "file:frontend/components/feature-carousel.tsx", "type": "file", "name": "feature-carousel.tsx", "filePath": "frontend/components/feature-carousel.tsx", "summary": "Feature carousel component with auto-scroll and navigation controls.", "tags": ["component", "ui", "react", "carousel"], "complexity": "moderate"},
+    {"id": "file:frontend/components/features-section.tsx", "type": "file", "name": "features-section.tsx", "filePath": "frontend/components/features-section.tsx", "summary": "Features section showcasing AI solution capabilities.", "tags": ["component", "ui", "react", "features"], "complexity": "simple"},
+    {"id": "file:frontend/components/filter-pills.tsx", "type": "file", "name": "filter-pills.tsx", "filePath": "frontend/components/filter-pills.tsx", "summary": "Filter pills component for status filtering.", "tags": ["component", "ui", "react", "filter"], "complexity": "simple"},
+    {"id": "file:frontend/components/content-grid.tsx", "type": "file", "name": "content-grid.tsx", "filePath": "frontend/components/content-grid.tsx", "summary": "Content grid component using SectionRow for horizontal scrolling.", "tags": ["component", "ui", "react", "grid"], "complexity": "simple"},
+    {"id": "file:frontend/components/about-section.tsx", "type": "file", "name": "about-section.tsx", "filePath": "frontend/components/about-section.tsx", "summary": "Landing page section about KhelIQ's mission to digitize grassroots football.", "tags": ["component", "ui", "react", "landing-page"], "complexity": "simple"},
+    {"id": "file:frontend/components/benefits-section.tsx", "type": "file", "name": "benefits-section.tsx", "filePath": "frontend/components/benefits-section.tsx", "summary": "Landing page section showing who benefits from AI-powered highlights.", "tags": ["component", "ui", "react", "landing-page"], "complexity": "simple"},
+    {"id": "file:frontend/components/confirm-dialog.tsx", "type": "file", "name": "confirm-dialog.tsx", "filePath": "frontend/components/confirm-dialog.tsx", "summary": "Reusable modal dialog for confirmations, alerts, and info messages.", "tags": ["component", "ui", "react", "dialog"], "complexity": "moderate"},
+    {"id": "file:frontend/components/final-cta-section.tsx", "type": "file", "name": "final-cta-section.tsx", "filePath": "frontend/components/final-cta-section.tsx", "summary": "Landing page call-to-action section with links to chat and upload.", "tags": ["component", "ui", "react", "landing-page"], "complexity": "simple"},
+    {"id": "file:frontend/components/footer.tsx", "type": "file", "name": "footer.tsx", "filePath": "frontend/components/footer.tsx", "summary": "Site footer with navigation links and branding.", "tags": ["component", "ui", "react", "footer"], "complexity": "simple"},
+    {"id": "file:frontend/components/how-it-works.tsx", "type": "file", "name": "how-it-works.tsx", "filePath": "frontend/components/how-it-works.tsx", "summary": "Landing page section showing the 6-step process of AI highlight generation.", "tags": ["component", "ui", "react", "landing-page"], "complexity": "simple"},
+    {"id": "file:frontend/components/problem-section.tsx", "type": "file", "name": "problem-section.tsx", "filePath": "frontend/components/problem-section.tsx", "summary": "Landing page section highlighting the problems with manual video editing.", "tags": ["component", "ui", "react", "landing-page"], "complexity": "simple"},
+    {"id": "file:frontend/components/section-row.tsx", "type": "file", "name": "section-row.tsx", "filePath": "frontend/components/section-row.tsx", "summary": "Reusable horizontal scrollable row for content cards.", "tags": ["component", "ui", "react", "landing-page"], "complexity": "simple"},
+    {"id": "file:frontend/components/solution-section.tsx", "type": "file", "name": "solution-section.tsx", "filePath": "frontend/components/solution-section.tsx", "summary": "Landing page section showcasing AI solution capabilities.", "tags": ["component", "ui", "react", "landing-page"], "complexity": "simple"},
+    {"id": "file:frontend/components/tech-stack.tsx", "type": "file", "name": "tech-stack.tsx", "filePath": "frontend/components/tech-stack.tsx", "summary": "Technology stack showcase component displaying AI/ML technologies used in the project.", "tags": ["component", "ui", "react", "landing-page"], "complexity": "simple"},
+    {"id": "file:frontend/components/technology-section.tsx", "type": "file", "name": "technology-section.tsx", "filePath": "frontend/components/technology-section.tsx", "summary": "Technology section component highlighting Computer Vision and Vision-Language Models.", "tags": ["component", "ui", "react", "landing-page"], "complexity": "simple"},
+    {"id": "file:frontend/components/theme-provider.tsx", "type": "file", "name": "theme-provider.tsx", "filePath": "frontend/components/theme-provider.tsx", "summary": "Theme provider wrapper for next-themes to handle dark/light mode.", "tags": ["ui", "theme", "next-themes"], "complexity": "simple"},
+    {"id": "file:frontend/components/ui/button.tsx", "type": "file", "name": "button.tsx", "filePath": "frontend/components/ui/button.tsx", "summary": "Shadcn UI Button component with variants (default, destructive, outline, secondary, ghost, link) and sizes.", "tags": ["ui", "shadcn", "button"], "complexity": "simple"},
+    {"id": "file:frontend/components/ui/card.tsx", "type": "file", "name": "card.tsx", "filePath": "frontend/components/ui/card.tsx", "summary": "Shadcn UI Card component with sub-components for header, title, description, action, content, and footer.", "tags": ["ui", "shadcn", "card"], "complexity": "simple"},
+    {"id": "file:frontend/components/ui/collapsible.tsx", "type": "file", "name": "collapsible.tsx", "filePath": "frontend/components/ui/collapsible.tsx", "summary": "Shadcn UI Collapsible component wrapper around Radix UI.", "tags": ["ui", "shadcn", "collapsible"], "complexity": "simple"},
+    {"id": "file:frontend/components/ui/dialog.tsx", "type": "file", "name": "dialog.tsx", "filePath": "frontend/components/ui/dialog.tsx", "summary": "Shadcn UI Dialog component with overlay, content, header, footer, title, and description sub-components.", "tags": ["ui", "shadcn", "dialog"], "complexity": "moderate"},
+    {"id": "file:frontend/components/ui/input.tsx", "type": "file", "name": "input.tsx", "filePath": "frontend/components/ui/input.tsx", "summary": "Shadcn UI Input component with focus states and validation styling.", "tags": ["ui", "shadcn", "input"], "complexity": "simple"},
+    {"id": "file:frontend/lib/utils.ts", "type": "file", "name": "utils.ts", "filePath": "frontend/lib/utils.ts", "summary": "Utility functions including cn() for combining Tailwind classes with clsx and tailwind-merge.", "tags": ["utility", "tailwind", "cn"], "complexity": "simple"},
+    {"id": "file:frontend/app/globals.css", "type": "file", "name": "globals.css", "filePath": "frontend/app/globals.css", "summary": "Global CSS with Tailwind v4 configuration using Claude theme (warm orange/brown primary with refined neutrals).", "tags": ["styles", "tailwind", "css"], "complexity": "simple"},
+    {"id": "file:frontend/styles/globals.css", "type": "file", "name": "globals.css", "filePath": "frontend/styles/globals.css", "summary": "Global CSS with Tailwind v4 configuration using default neutral theme.", "tags": ["styles", "tailwind", "css"], "complexity": "simple"},
+    {"id": "class:backend/app.py:VideoRAGQuerier", "type": "class", "name": "VideoRAGQuerier", "filePath": "backend/app.py", "lineRange": [1, 100], "summary": "Main class for video RAG queries with FastAPI integration. Handles data loading, event deduplication, Gemini API setup, natural language query processing.", "tags": ["video-analysis", "rag", "gemini", "event-dedup", "football"], "complexity": "complex"},
+    {"id": "class:backend/hybrid_rag.py:HybridVideoRAGQuerier", "type": "class", "name": "HybridVideoRAGQuerier", "filePath": "backend/hybrid_rag.py", "lineRange": [1, 100], "summary": "Intelligent router between temporal and semantic search. Detects query type and routes to appropriate search method. Integrates both TimeBasedIndex and FAISSSemanticIndex with Gemini AI.", "tags": ["hybrid-search", "router", "rag", "gemini", "video-analysis"], "complexity": "complex"},
+    {"id": "class:backend/hybrid_rag.py:TimeBasedIndex", "type": "class", "name": "TimeBasedIndex", "filePath": "backend/hybrid_rag.py", "lineRange": [1, 100], "summary": "Handles precise temporal queries for football video analysis. Loads preprocessed video data and provides time-based event retrieval.", "tags": ["temporal-index", "video-analysis", "football"], "complexity": "moderate"},
+    {"id": "class:backend/hybrid_rag.py:FAISSSemanticIndex", "type": "class", "name": "FAISSSemanticIndex", "filePath": "backend/hybrid_rag.py", "lineRange": [1, 100], "summary": "Handles semantic similarity queries using FAISS and sentence transformers. Creates embeddings for video frames and performs cosine similarity search.", "tags": ["semantic-search", "faiss", "embeddings", "video-analysis"], "complexity": "complex"},
+    {"id": "class:backend/rag_query_helper.py:VideoRAGQuerier", "type": "class", "name": "VideoRAGQuerier", "filePath": "backend/rag_query_helper.py", "lineRange": [1, 100], "summary": "Original Video RAG Querier class with event deduplication, natural language query handling, Gemini AI integration, and interactive CLI mode.", "tags": ["video-analysis", "rag", "gemini", "cli", "football"], "complexity": "complex"},
+    {"id": "class:backend/enhanced_rag_query_helper.py:SmartVideoRAGQuerier", "type": "class", "name": "SmartVideoRAGQuerier", "filePath": "backend/enhanced_rag_query_helper.py", "lineRange": [1, 100], "summary": "Enhanced querier with rule-based deduplication. Implements smart goal filtering using 30-second windows, celebration/replay detection.", "tags": ["video-analysis", "rag", "smart-dedup", "gemini", "optimized"], "complexity": "complex"},
+    {"id": "class:backend/generator/app.py:RobustMultiModalDetector", "type": "class", "name": "RobustMultiModalDetector", "filePath": "backend/generator/app.py", "lineRange": [1, 100], "summary": "Main detector class that orchestrates video processing with both Swin Transformer models, audio transcription, and multimodal fusion.", "tags": ["ml", "detector", "multimodal", "orchestrator"], "complexity": "complex"},
+    {"id": "class:backend/generator/app.py:EnhancedSwinSmallTransformer", "type": "class", "name": "EnhancedSwinSmallTransformer", "filePath": "backend/generator/app.py", "lineRange": [1, 80], "summary": "Enhanced Swin Transformer model with context-aware temporal module, LSTM layers, multi-head attention, and frame importance weighting for football event classification.", "tags": ["ml", "swin-transformer", "temporal", "classification"], "complexity": "complex"},
+    {"id": "class:backend/generator/app.py:RobustCommentaryAnalyzer", "type": "class", "name": "RobustCommentaryAnalyzer", "filePath": "backend/generator/app.py", "lineRange": [1, 80], "summary": "Audio analysis class using OpenAI Whisper for transcription and fuzzy matching for event keyword detection. Supports replay detection.", "tags": ["ml", "audio", "whisper", "transcription"], "complexity": "complex"},
+    {"id": "class:backend/generator/app.py:MultimodalFusionEngine", "type": "class", "name": "MultimodalFusionEngine", "filePath": "backend/generator/app.py", "lineRange": [1, 80], "summary": "Fuses video and audio detections with event-level confidence rules. Handles audio verification, event correction, replay filtering, and trim window overlap prevention.", "tags": ["ml", "fusion", "multimodal"], "complexity": "complex"},
+    {"id": "class:backend/generator/app.py:FootballSequenceValidator", "type": "class", "name": "FootballSequenceValidator", "filePath": "backend/generator/app.py", "lineRange": [1, 60], "summary": "Validates and prunes football events based on game sequence rules. Ensures valid event transitions with temporal constraints.", "tags": ["validation", "football-rules", "sequence"], "complexity": "moderate"},
+    {"id": "class:backend/hls/live_session.py:LiveSession", "type": "class", "name": "LiveSession", "filePath": "backend/hls/live_session.py", "lineRange": [1, 60], "summary": "Dataclass representing a live HLS analysis session. Tracks session state including HLS URL, analysis window size, download/analyzed counts, events, clips, and status.", "tags": ["dataclass", "session", "mongodb"], "complexity": "moderate"},
+    {"id": "class:backend/hls/live_session.py:LiveEvent", "type": "class", "name": "LiveEvent", "filePath": "backend/hls/live_session.py", "lineRange": [1, 30], "summary": "Dataclass representing a detected event in a live session. Contains timestamp, event type, confidence, clip URL/path, and audio verification status.", "tags": ["dataclass", "event", "mongodb"], "complexity": "simple"},
+    {"id": "class:backend/hls/live_simulator.py:LiveStream", "type": "class", "name": "LiveStream", "filePath": "backend/hls/live_simulator.py", "lineRange": [1, 60], "summary": "State class for simulated live stream. Parses VOD m3u8, maintains sliding window of released segments, and builds live-style playlists.", "tags": ["simulator", "streaming", "hls"], "complexity": "moderate"},
+    {"id": "class:backend/hls/live_models.py:_ModelManager", "type": "class", "name": "_ModelManager", "filePath": "backend/hls/live_models.py", "lineRange": [1, 60], "summary": "Thread-safe singleton that holds the ML detector. Lazy-loads RobustMultiModalDetector on first call.", "tags": ["singleton", "ml", "thread-safe"], "complexity": "moderate"},
+    {"id": "class:backend/process_video_segments.py:VideoSegmentProcessor", "type": "class", "name": "VideoSegmentProcessor", "filePath": "backend/process_video_segments.py", "lineRange": [1, 100], "summary": "Processes video segment JSON files to add global timestamps, update file paths, create RAG-optimized descriptions, and build searchable event indexes.", "tags": ["video-processing", "rag", "indexing", "batch"], "complexity": "moderate"}
+  ],
+  "edges": [
+    {"source": "file:backend/app.py", "target": "class:backend/app.py:VideoRAGQuerier", "type": "contains", "direction": "forward", "weight": 1.0},
+    {"source": "file:backend/hybrid_rag.py", "target": "class:backend/hybrid_rag.py:TimeBasedIndex", "type": "contains", "direction": "forward", "weight": 1.0},
+    {"source": "file:backend/hybrid_rag.py", "target": "class:backend/hybrid_rag.py:FAISSSemanticIndex", "type": "contains", "direction": "forward", "weight": 1.0},
+    {"source": "file:backend/hybrid_rag.py", "target": "class:backend/hybrid_rag.py:HybridVideoRAGQuerier", "type": "contains", "direction": "forward", "weight": 1.0},
+    {"source": "file:backend/rag_query_helper.py", "target": "class:backend/rag_query_helper.py:VideoRAGQuerier", "type": "contains", "direction": "forward", "weight": 1.0},
+    {"source": "file:backend/enhanced_rag_query_helper.py", "target": "class:backend/enhanced_rag_query_helper.py:SmartVideoRAGQuerier", "type": "contains", "direction": "forward", "weight": 1.0},
+    {"source": "file:backend/generator/app.py", "target": "class:backend/generator/app.py:RobustMultiModalDetector", "type": "contains", "direction": "forward", "weight": 1.0},
+    {"source": "file:backend/generator/app.py", "target": "class:backend/generator/app.py:EnhancedSwinSmallTransformer", "type": "contains", "direction": "forward", "weight": 1.0},
+    {"source": "file:backend/generator/app.py", "target": "class:backend/generator/app.py:RobustCommentaryAnalyzer", "type": "contains", "direction": "forward", "weight": 1.0},
+    {"source": "file:backend/generator/app.py", "target": "class:backend/generator/app.py:MultimodalFusionEngine", "type": "contains", "direction": "forward", "weight": 1.0},
+    {"source": "file:backend/generator/app.py", "target": "class:backend/generator/app.py:FootballSequenceValidator", "type": "contains", "direction": "forward", "weight": 1.0},
+    {"source": "file:backend/hls/live_app.py", "target": "file:backend/hls/live_session.py", "type": "imports", "direction": "forward", "weight": 0.7},
+    {"source": "file:backend/hls/live_app.py", "target": "file:backend/hls/utils/converter.py", "type": "imports", "direction": "forward", "weight": 0.7},
+    {"source": "file:backend/hls/live_app.py", "target": "file:backend/hls/live_models.py", "type": "imports", "direction": "forward", "weight": 0.7},
+    {"source": "file:backend/hls/live_session.py", "target": "class:backend/hls/live_session.py:LiveEvent", "type": "contains", "direction": "forward", "weight": 1.0},
+    {"source": "file:backend/hls/live_session.py", "target": "class:backend/hls/live_session.py:LiveSession", "type": "contains", "direction": "forward", "weight": 1.0},
+    {"source": "file:backend/hls/live_simulator.py", "target": "class:backend/hls/live_simulator.py:LiveStream", "type": "contains", "direction": "forward", "weight": 1.0},
+    {"source": "file:backend/hls/main.py", "target": "file:backend/hls/utils/converter.py", "type": "imports", "direction": "forward", "weight": 0.7},
+    {"source": "file:backend/hls/live_models.py", "target": "class:backend/hls/live_models.py:_ModelManager", "type": "contains", "direction": "forward", "weight": 1.0},
+    {"source": "file:backend/process_video_segments.py", "target": "class:backend/process_video_segments.py:VideoSegmentProcessor", "type": "contains", "direction": "forward", "weight": 1.0},
+    {"source": "class:backend/hybrid_rag.py:HybridVideoRAGQuerier", "target": "class:backend/hybrid_rag.py:TimeBasedIndex", "type": "calls", "direction": "forward", "weight": 0.8},
+    {"source": "class:backend/hybrid_rag.py:HybridVideoRAGQuerier", "target": "class:backend/hybrid_rag.py:FAISSSemanticIndex", "type": "calls", "direction": "forward", "weight": 0.8},
+    {"source": "file:backend/app.py", "target": "file:backend/config.py", "type": "imports", "direction": "forward", "weight": 0.7},
+    {"source": "file:backend/hybrid_rag.py", "target": "file:backend/config.py", "type": "imports", "direction": "forward", "weight": 0.7},
+    {"source": "file:backend/rag_query_helper.py", "target": "file:backend/config.py", "type": "imports", "direction": "forward", "weight": 0.7},
+    {"source": "file:backend/enhanced_rag_query_helper.py", "target": "file:backend/config.py", "type": "imports", "direction": "forward", "weight": 0.7},
+    {"source": "file:backend/generator/app.py", "target": "file:backend/config.py", "type": "imports", "direction": "forward", "weight": 0.7},
+    {"source": "file:backend/generator/app2.py", "target": "file:backend/config.py", "type": "imports", "direction": "forward", "weight": 0.7},
+    {"source": "file:backend/hls/live_app.py", "target": "file:backend/config.py", "type": "imports", "direction": "forward", "weight": 0.7},
+    {"source": "file:backend/app.py", "target": "class:backend/app.py:VideoRAGQuerier", "type": "exports", "direction": "forward", "weight": 0.8},
+    {"source": "file:backend/hybrid_rag.py", "target": "class:backend/hybrid_rag.py:HybridVideoRAGQuerier", "type": "exports", "direction": "forward", "weight": 0.8},
+    {"source": "file:backend/rag_query_helper.py", "target": "class:backend/rag_query_helper.py:VideoRAGQuerier", "type": "exports", "direction": "forward", "weight": 0.8},
+    {"source": "file:backend/enhanced_rag_query_helper.py", "target": "class:backend/enhanced_rag_query_helper.py:SmartVideoRAGQuerier", "type": "exports", "direction": "forward", "weight": 0.8},
+    {"source": "class:backend/app.py:VideoRAGQuerier", "target": "class:backend/rag_query_helper.py:VideoRAGQuerier", "type": "related", "direction": "bidirectional", "weight": 0.7},
+    {"source": "class:backend/enhanced_rag_query_helper.py:SmartVideoRAGQuerier", "target": "class:backend/rag_query_helper.py:VideoRAGQuerier", "type": "related", "direction": "bidirectional", "weight": 0.7},
+    {"source": "class:backend/generator/app.py:RobustMultiModalDetector", "target": "class:backend/generator/app.py:EnhancedSwinSmallTransformer", "type": "calls", "direction": "forward", "weight": 0.8},
+    {"source": "class:backend/generator/app.py:RobustMultiModalDetector", "target": "class:backend/generator/app.py:RobustCommentaryAnalyzer", "type": "calls", "direction": "forward", "weight": 0.8},
+    {"source": "class:backend/generator/app.py:RobustMultiModalDetector", "target": "class:backend/generator/app.py:MultimodalFusionEngine", "type": "calls", "direction": "forward", "weight": 0.8},
+    {"source": "class:backend/generator/app.py:MultimodalFusionEngine", "target": "class:backend/generator/app.py:RobustCommentaryAnalyzer", "type": "calls", "direction": "forward", "weight": 0.8},
+    {"source": "file:frontend/app/chat/page.tsx", "target": "file:frontend/app/chat/components/AnalysisDisplay.tsx", "type": "imports", "direction": "forward", "weight": 0.7},
+    {"source": "file:frontend/app/page.tsx", "target": "file:frontend/app/layout.tsx", "type": "imports", "direction": "forward", "weight": 0.6},
+    {"source": "file:frontend/app/matches/page.tsx", "target": "file:frontend/app/matches/[match_id]/page.tsx", "type": "related", "direction": "forward", "weight": 0.7},
+    {"source": "file:frontend/components/section-row.tsx", "target": "file:frontend/components/content-card.tsx", "type": "imports", "direction": "forward", "weight": 0.7},
+    {"source": "file:frontend/components/confirm-dialog.tsx", "target": "file:frontend/components/ui/dialog.tsx", "type": "imports", "direction": "forward", "weight": 0.7},
+    {"source": "file:frontend/components/ui/button.tsx", "target": "file:frontend/lib/utils.ts", "type": "imports", "direction": "forward", "weight": 0.7},
+    {"source": "file:frontend/components/ui/card.tsx", "target": "file:frontend/lib/utils.ts", "type": "imports", "direction": "forward", "weight": 0.7},
+    {"source": "file:frontend/components/ui/dialog.tsx", "target": "file:frontend/lib/utils.ts", "type": "imports", "direction": "forward", "weight": 0.7},
+    {"source": "file:frontend/components/ui/input.tsx", "target": "file:frontend/lib/utils.ts", "type": "imports", "direction": "forward", "weight": 0.7}
+  ],
+  "layers": [
+    {
+      "id": "layer:backend-api",
+      "name": "Backend API Layer",
+      "description": "FastAPI endpoints for video analysis, live streaming, HLS processing, and RAG queries. Handles HTTP requests, WebSocket connections, and serves ML-generated highlights.",
+      "nodeIds": [
+        "file:backend/app.py",
+        "file:backend/generator/app.py",
+        "file:backend/generator/app2.py",
+        "file:backend/hls/live_app.py",
+        "file:backend/hls/main.py",
+        "file:backend/hls/live_simulator.py"
+      ]
+    },
+    {
+      "id": "layer:ml-analysis",
+      "name": "ML Analysis Layer",
+      "description": "Machine learning components for football event detection including Swin Transformer models, multimodal fusion, audio transcription with Whisper, and sequence validation.",
+      "nodeIds": [
+        "file:backend/hybrid_rag.py",
+        "file:backend/rag_query_helper.py",
+        "file:backend/enhanced_rag_query_helper.py",
+        "file:backend/process_video_segments.py"
+      ]
+    },
+    {
+      "id": "layer:data-persistence",
+      "name": "Data Persistence Layer",
+      "description": "MongoDB session management, live streaming data models, ML model loading singleton, and video segment processing for RAG systems.",
+      "nodeIds": [
+        "file:backend/hls/live_session.py",
+        "file:backend/hls/live_models.py",
+        "file:backend/config.py"
+      ]
+    },
+    {
+      "id": "layer:video-processing",
+      "name": "Video Processing Layer",
+      "description": "FFmpeg-based video conversion utilities for HLS streaming, multi-bitrate transcoding, segment concatenation, and highlight clip extraction.",
+      "nodeIds": [
+        "file:backend/hls/utils/converter.py"
+      ]
+    },
+    {
+      "id": "layer:frontend-pages",
+      "name": "Frontend Pages Layer",
+      "description": "Next.js app router pages including landing page, chat interface, match browser, video upload, and live streaming interface with WebSocket integration.",
+      "nodeIds": [
+        "file:frontend/app/page.tsx",
+        "file:frontend/app/layout.tsx",
+        "file:frontend/app/chat/page.tsx",
+        "file:frontend/app/matches/page.tsx",
+        "file:frontend/app/matches/[match_id]/page.tsx",
+        "file:frontend/app/upload/page.tsx",
+        "file:frontend/app/live/page.tsx",
+        "file:frontend/app/chat/components/AnalysisDisplay.tsx"
+      ]
+    },
+    {
+      "id": "layer:frontend-components",
+      "name": "Frontend Components Layer",
+      "description": "React components for landing page sections, navigation, hero, feature showcases, and marketing content.",
+      "nodeIds": [
+        "file:frontend/components/site-nav.tsx",
+        "file:frontend/components/hero-section.tsx",
+        "file:frontend/components/hero-placeholder.tsx",
+        "file:frontend/components/content-card.tsx",
+        "file:frontend/components/feature-carousel.tsx",
+        "file:frontend/components/filter-pills.tsx",
+        "file:frontend/components/content-grid.tsx",
+        "file:frontend/components/features-section.tsx",
+        "file:frontend/components/about-section.tsx",
+        "file:frontend/components/benefits-section.tsx",
+        "file:frontend/components/confirm-dialog.tsx",
+        "file:frontend/components/final-cta-section.tsx",
+        "file:frontend/components/footer.tsx",
+        "file:frontend/components/how-it-works.tsx",
+        "file:frontend/components/problem-section.tsx",
+        "file:frontend/components/section-row.tsx",
+        "file:frontend/components/solution-section.tsx",
+        "file:frontend/components/tech-stack.tsx",
+        "file:frontend/components/technology-section.tsx",
+        "file:frontend/components/theme-provider.tsx"
+      ]
+    },
+    {
+      "id": "layer:ui-foundation",
+      "name": "UI Foundation Layer",
+      "description": "Shadcn UI components (button, card, dialog, input, collapsible), theme provider, Tailwind CSS configuration, and utility functions for class merging.",
+      "nodeIds": [
+        "file:frontend/components/ui/button.tsx",
+        "file:frontend/components/ui/card.tsx",
+        "file:frontend/components/ui/collapsible.tsx",
+        "file:frontend/components/ui/dialog.tsx",
+        "file:frontend/components/ui/input.tsx",
+        "file:frontend/lib/utils.ts",
+        "file:frontend/app/globals.css",
+        "file:frontend/styles/globals.css"
+      ]
+    }
+  ],
+  "tour": [
+    {
+      "order": 1,
+      "title": "Project Overview",
+      "description": "Start with the main landing page (page.tsx) and root layout (layout.tsx). The project is KhelIQ - an AI-powered football highlight generation platform with a Next.js frontend and Python FastAPI backend using Swin Transformer models for video analysis.",
+      "nodeIds": ["file:frontend/app/page.tsx", "file:frontend/app/layout.tsx"]
+    },
+    {
+      "order": 2,
+      "title": "Backend API Entry Point",
+      "description": "The backend/app.py is the main FastAPI application serving video analysis API. It contains VideoRAGQuerier class with event deduplication, Gemini AI integration, and video clip generation via ffmpeg.",
+      "nodeIds": ["file:backend/app.py"]
+    },
+    {
+      "order": 3,
+      "title": "ML Event Detection",
+      "description": "The generator/app.py contains the multimodal football event detection system with Swin Transformer models, audio transcription using Whisper, and AI-powered commentary verification. This is the core ML engine.",
+      "nodeIds": ["file:backend/generator/app.py", "file:backend/generator/app2.py"]
+    },
+    {
+      "order": 4,
+      "title": "Hybrid RAG System",
+      "description": "The hybrid_rag.py combines time-based indexing for precise temporal queries and FAISS semantic search for content-based queries. It intelligently routes queries between temporal and semantic search with Gemini AI analysis.",
+      "nodeIds": ["file:backend/hybrid_rag.py"]
+    },
+    {
+      "order": 5,
+      "title": "Live Streaming",
+      "description": "The HLS streaming system (live_app.py) provides real-time highlight detection from HLS streams. It uses WebSocket for progress updates, manages analysis sessions, and integrates with the ML detector for live events.",
+      "nodeIds": ["file:backend/hls/live_app.py", "file:backend/hls/live_session.py"]
+    },
+    {
+      "order": 6,
+      "title": "Video Processing Utilities",
+      "description": "The converter.py provides FFmpeg-based utilities for HLS streaming including multi-bitrate transcoding, segment concatenation, and highlight clip extraction.",
+      "nodeIds": ["file:backend/hls/utils/converter.py"]
+    },
+    {
+      "order": 7,
+      "title": "Chat Interface",
+      "description": "The chat/page.tsx provides a natural language interface for querying match events with AI analysis. It features message history, video dialogs, and frame detail modals.",
+      "nodeIds": ["file:frontend/app/chat/page.tsx", "file:frontend/app/chat/components/AnalysisDisplay.tsx"]
+    },
+    {
+      "order": 8,
+      "title": "Match Management",
+      "description": "The matches system (matches/page.tsx and [match_id]/page.tsx) handles match browsing, detailed match views with video player, WebSocket progress tracking, and clip management with play/download functionality.",
+      "nodeIds": ["file:frontend/app/matches/page.tsx", "file:frontend/app/matches/[match_id]/page.tsx"]
+    },
+    {
+      "order": 9,
+      "title": "Live Streaming UI",
+      "description": "The live/page.tsx provides the interface for real-time highlight detection from HLS streams with WebSocket connection, activity log, live stats, clips gallery, and past sessions management.",
+      "nodeIds": ["file:frontend/app/live/page.tsx"]
+    },
+    {
+      "order": 10,
+      "title": "UI Components",
+      "description": "The frontend uses Shadcn UI components (button, card, dialog, input) built on Radix UI primitives, with Tailwind CSS for styling and next-themes for dark/light mode support.",
+      "nodeIds": ["file:frontend/components/ui/button.tsx", "file:frontend/components/ui/dialog.tsx", "file:frontend/lib/utils.ts", "file:frontend/components/theme-provider.tsx"]
+    }
+  ]
+}

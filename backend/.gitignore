@@ -47,3 +47,14 @@ media
 models
 
 testing_videos
+# Video files
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.flv
+
+# Session data
+sessions/
+hls/hls/try/
+uploads/

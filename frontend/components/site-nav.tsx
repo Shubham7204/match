@@ -5,7 +5,9 @@ const navItems = [
   { label: "Chat", href: "/chat" },
   { label: "Matches", href: "/matches" },
   { label: "Upload Match", href: "/upload" },
+  { label: "Live", href: "/live" },
 ]
+
 
 export function SiteNav() {
   return (
