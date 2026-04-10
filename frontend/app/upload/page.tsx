@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { SiteNav } from "@/components/site-nav"
 import { SiteFooter } from "@/components/footer"
 import { ConfirmDialog } from "@/components/confirm-dialog"
-import { Upload, CheckCircle2, Loader2 } from "lucide-react"
+import { Sparkles, Upload, Loader2 } from "lucide-react"
 
 export default function UploadPage() {
   const router = useRouter()
@@ -40,7 +40,11 @@ export default function UploadPage() {
     if (file) {
       setPosterFile(file)
       setPosterUrl(URL.createObjectURL(file))
+      return
     }
+
+    setPosterFile(null)
+    setPosterUrl(null)
   }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -77,7 +81,9 @@ export default function UploadPage() {
           isOpen: true,
           type: "success",
           title: "Upload Successful",
-          message: "Match uploaded successfully! Redirecting to matches page..."
+          message: posterFile
+            ? "Match uploaded successfully. Your uploaded poster will be used for the thumbnail."
+            : "Match uploaded successfully. You can generate the thumbnail later from the match details page."
         })
         setTimeout(() => {
           router.push("/matches")
@@ -116,8 +122,8 @@ export default function UploadPage() {
       <section className="border-b border-border/60 bg-gradient-to-b from-secondary/5 to-background">
         <div className="mx-auto max-w-4xl px-4 py-4 md:px-6 md:py-6">
           <p className="text-sm text-muted-foreground">
-            Upload your football match video and let our AI analyze it for highlights, player appearances, and key
-            moments.
+            Upload your football match video first. You can analyze it and generate a thumbnail later from the match
+            details page.
           </p>
         </div>
       </section>
@@ -173,28 +179,50 @@ export default function UploadPage() {
               )}
             </label>
 
-            <label className="space-y-2">
-              <span className="text-sm font-semibold text-foreground">Poster Image (Optional)</span>
-              <input
-                type="file"
-                accept="image/*"
-                className="w-full rounded-lg border border-border/60 bg-card/40 px-4 py-3 text-sm"
-                onChange={handlePosterChange}
-                disabled={isUploading}
-              />
-              {posterUrl ? (
-                <img
-                  src={posterUrl}
-                  alt="Poster preview"
-                  className="mt-3 aspect-video w-full rounded-lg border border-border/60 object-cover shadow-md"
-                />
-              ) : (
-                <div className="mt-3 aspect-video w-full rounded-lg border-2 border-dashed border-border/40 bg-card/20 flex flex-col items-center justify-center gap-2">
-                  <Upload className="w-6 h-6 text-muted-foreground" />
-                  <p className="text-xs text-muted-foreground">Select a poster image (optional)</p>
+            <div className="space-y-2">
+              <span className="text-sm font-semibold text-foreground">AI Thumbnail</span>
+              <div className="rounded-lg border border-border/60 bg-card/40 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-foreground">
+                      Optional poster now, AI thumbnail later
+                    </p>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      Upload stays fast by default. You can still upload your own poster now, or generate an AI
+                      thumbnail later from the match details page when you want it.
+                    </p>
+                  </div>
                 </div>
-              )}
-            </label>
+                <div className="mt-4 aspect-video w-full rounded-lg border border-dashed border-border/40 bg-background/40 flex items-center justify-center">
+                  {posterUrl ? (
+                    <img
+                      src={posterUrl}
+                      alt="Poster preview"
+                      className="h-full w-full rounded-lg object-cover"
+                    />
+                  ) : (
+                    <p className="px-6 text-center text-xs text-muted-foreground">
+                      Thumbnail preview will be available in the matches list after upload.
+                    </p>
+                  )}
+                </div>
+                <div className="mt-4">
+                  <label className="space-y-2">
+                    <span className="text-xs font-medium text-foreground">Optional manual poster override</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="w-full rounded-lg border border-border/60 bg-background/60 px-4 py-3 text-sm"
+                      onChange={handlePosterChange}
+                      disabled={isUploading}
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
           </div>
 
           <label className="space-y-2">
@@ -212,7 +240,9 @@ export default function UploadPage() {
               <div className="flex items-center gap-3">
                 <Loader2 className="w-5 h-5 animate-spin text-primary" />
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-foreground">Uploading match...</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {posterFile ? "Uploading match and poster..." : "Uploading match..."}
+                  </p>
                   <div className="mt-2 h-2 bg-secondary/30 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-primary transition-all duration-300"

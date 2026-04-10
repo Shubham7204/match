@@ -7,6 +7,8 @@ from torchvision import transforms
 import json
 import os
 import gc
+import mimetypes
+import importlib.util
 from collections import defaultdict, Counter
 import time
 import whisper
@@ -32,6 +34,13 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import psutil
 
+try:
+    from google import genai as google_genai
+    from google.genai import types as genai_types
+except ImportError:
+    google_genai = None
+    genai_types = None
+
 app = FastAPI()
 
 # CORS Configuration
@@ -52,6 +61,231 @@ matches_collection = db["matches"]
 # Base directories
 BASE_MEDIA_DIR = Path("media")
 BASE_MEDIA_DIR.mkdir(exist_ok=True)
+
+THUMBNAIL_MODEL = os.getenv("GEMINI_THUMBNAIL_MODEL", "gemini-3.1-flash-image-preview")
+
+
+def read_env_value_from_file(env_path: Path, key: str) -> Optional[str]:
+    if not env_path.exists():
+        return None
+
+    try:
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+
+            env_key, env_value = line.split("=", 1)
+            if env_key.strip() != key:
+                continue
+
+            return env_value.strip().strip('"').strip("'")
+    except Exception as exc:
+        print(f"Failed reading env file {env_path}: {exc}")
+
+    return None
+
+
+def read_value_from_config_file(config_path: Path, key: str) -> Optional[str]:
+    if not config_path.exists():
+        return None
+
+    try:
+        spec = importlib.util.spec_from_file_location("thumbnail_config", str(config_path))
+        if spec is None or spec.loader is None:
+            return None
+
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        value = getattr(module, key, None)
+        return str(value).strip() if value else None
+    except Exception as exc:
+        print(f"Failed reading config file {config_path}: {exc}")
+
+    return None
+
+
+def resolve_gemini_api_key() -> Optional[str]:
+    direct_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if direct_key:
+        return direct_key
+
+    backend_dir = Path(__file__).resolve().parents[1]
+    env_path = backend_dir / ".env"
+    config_path = backend_dir / "config.py"
+
+    for key_name in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        file_value = read_env_value_from_file(env_path, key_name)
+        if file_value:
+            return file_value
+
+    for key_name in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        config_value = read_value_from_config_file(config_path, key_name)
+        if config_value:
+            return config_value
+
+    return None
+
+
+def get_thumbnail_client():
+    api_key = resolve_gemini_api_key()
+    if not api_key or google_genai is None:
+        print("Thumbnail generation disabled: Gemini API key or google-genai client not available")
+        return None
+
+    try:
+        return google_genai.Client(api_key=api_key)
+    except Exception as exc:
+        print(f"Thumbnail client initialization failed: {exc}")
+        return None
+
+
+def extract_thumbnail_reference_frames(
+    video_path: Path,
+    output_dir: Path,
+    frame_count: int = 3,
+) -> List[Path]:
+    cap = cv2.VideoCapture(str(video_path))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frame_paths: List[Path] = []
+
+    if total_frames <= 0:
+        cap.release()
+        return frame_paths
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for index, position in enumerate(np.linspace(0.18, 0.82, frame_count), start=1):
+        frame_number = int(round(position * max(total_frames - 1, 0)))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            continue
+
+        height, width = frame.shape[:2]
+        max_side = max(height, width)
+        if max_side > 1280:
+            scale = 1280 / max_side
+            frame = cv2.resize(frame, (int(width * scale), int(height * scale)))
+
+        frame_path = output_dir / f"thumbnail_ref_{index:02d}.jpg"
+        cv2.imwrite(str(frame_path), frame, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+        frame_paths.append(frame_path)
+
+    cap.release()
+    return frame_paths
+
+
+def build_thumbnail_prompt(
+    title: str,
+    match_date: str,
+    description: str,
+    reference_frame_count: int,
+) -> str:
+    description_text = (description or "").strip() or "No extra description was provided."
+
+    return f"""
+Create a photorealistic football match thumbnail in 16:9 landscape format.
+
+Match title: {title}
+Match date: {match_date}
+Match description: {description_text}
+Reference frames attached: {reference_frame_count}
+
+Use the reference frames only to understand the real match atmosphere, team colors, jersey styling, stadium lighting,
+camera angle, crowd mood, and level of action. Generate a brand-new original thumbnail, not a copy of any frame.
+
+Requirements:
+- Make it feel like a real broadcast sports thumbnail, not digital art.
+- Keep players anatomically correct, faces natural, and motion believable.
+- Show a dramatic in-game football moment with the ball visible and clear competitive tension.
+- Match the real kit colors and overall stadium vibe suggested by the references.
+- Prefer a tight cinematic crop with strong subject focus and realistic depth of field.
+- Grass, lighting, shadows, skin tones, and fabric texture should look natural.
+- Includes Match details
+- Avoid exaggerated fantasy effects, extra limbs, distorted hands, or cartoon styling.
+""".strip()
+
+
+def save_generated_thumbnail(response: object, output_path: Path) -> Optional[Path]:
+    response_parts = []
+
+    if getattr(response, "candidates", None):
+        for candidate in response.candidates:
+            content = getattr(candidate, "content", None)
+            parts = getattr(content, "parts", None) or []
+            response_parts.extend(parts)
+
+    if getattr(response, "parts", None):
+        response_parts.extend(response.parts)
+
+    for part in response_parts:
+        inline_data = getattr(part, "inline_data", None)
+        if inline_data and getattr(inline_data, "data", None):
+            mime_type = getattr(inline_data, "mime_type", "image/png")
+            extension = mimetypes.guess_extension(mime_type) or ".png"
+            final_path = output_path.with_suffix(extension)
+            with open(final_path, "wb") as file_obj:
+                file_obj.write(inline_data.data)
+            return final_path
+
+    return None
+
+
+def generate_match_thumbnail(
+    title: str,
+    match_date: str,
+    description: str,
+    video_path: Path,
+    match_dir: Path,
+) -> Tuple[Optional[Path], Optional[str]]:
+    reference_dir = match_dir / "thumbnail_refs"
+    reference_frames = extract_thumbnail_reference_frames(video_path, reference_dir)
+
+    if not reference_frames:
+        return None, None
+
+    client = get_thumbnail_client()
+    if client is None or genai_types is None:
+        fallback_path = match_dir / "poster.jpg"
+        shutil.copyfile(reference_frames[0], fallback_path)
+        print("Thumbnail generation fell back to sampled video frame")
+        return fallback_path, "video_frame_fallback"
+
+    try:
+        prompt = build_thumbnail_prompt(title, match_date, description, len(reference_frames))
+        contents: List[object] = [prompt]
+
+        for frame_path in reference_frames:
+            with open(frame_path, "rb") as frame_file:
+                contents.append(
+                    genai_types.Part.from_bytes(
+                        data=frame_file.read(),
+                        mime_type="image/jpeg",
+                    )
+                )
+
+        config_kwargs = {"response_modalities": ["IMAGE", "TEXT"]}
+        if hasattr(genai_types, "ImageConfig"):
+            config_kwargs["image_config"] = genai_types.ImageConfig(aspect_ratio="16:9")
+
+        response = client.models.generate_content(
+            model=THUMBNAIL_MODEL,
+            contents=contents,
+            config=genai_types.GenerateContentConfig(**config_kwargs),
+        )
+
+        poster_path = save_generated_thumbnail(response, match_dir / "poster")
+        if poster_path:
+            print(f"AI thumbnail generated successfully: {poster_path}")
+            return poster_path, "ai_generated"
+    except Exception as exc:
+        print(f"AI thumbnail generation failed: {exc}")
+
+    fallback_path = match_dir / "poster.jpg"
+    shutil.copyfile(reference_frames[0], fallback_path)
+    print("Thumbnail generation failed, using sampled video frame instead")
+    return fallback_path, "video_frame_fallback"
 
 # ============================================================================
 # CONFIGURATION
@@ -1992,13 +2226,15 @@ async def upload_match(
         with open(video_path, "wb") as buffer:
             shutil.copyfileobj(video.file, buffer)
 
-        # Save poster if provided
+        # Save poster if provided. Otherwise leave thumbnail generation for an explicit user action later.
         poster_path = None
+        poster_source = None
         if poster:
             poster_filename = f"poster{Path(poster.filename).suffix}"
             poster_path = match_dir / poster_filename
             with open(poster_path, "wb") as buffer:
                 shutil.copyfileobj(poster.file, buffer)
+            poster_source = "uploaded"
 
         # Create match document
         match_doc = {
@@ -2008,6 +2244,7 @@ async def upload_match(
             "description": description or "",
             "video_path": str(video_path),
             "poster_path": str(poster_path) if poster_path else None,
+            "poster_source": poster_source,
             "status": "uploaded",  # uploaded -> processing -> completed -> failed
             "main_highlights": None,
             "event_clips": {},
@@ -2047,6 +2284,65 @@ async def websocket_progress(websocket: WebSocket, match_id: str):
             await asyncio.sleep(1)
     except WebSocketDisconnect:
         progress_tracker.websockets[match_id].remove(websocket)
+
+
+@app.post("/api/matches/{match_id}/generate-thumbnail")
+async def generate_match_thumbnail_endpoint(match_id: str):
+    """
+    Generate an AI thumbnail on demand for a specific match.
+    """
+    try:
+        match = await matches_collection.find_one({"match_id": match_id})
+        if not match:
+            raise HTTPException(status_code=404, detail="Match not found")
+
+        video_path = Path(match["video_path"])
+        if not video_path.exists():
+            raise HTTPException(status_code=404, detail="Original video not found")
+
+        match_dir = video_path.parent
+
+        poster_path, poster_source = await run_in_threadpool(
+            generate_match_thumbnail,
+            match.get("title", ""),
+            match.get("date", ""),
+            match.get("description", ""),
+            video_path,
+            match_dir,
+        )
+
+        if not poster_path:
+            raise HTTPException(status_code=500, detail="Thumbnail generation returned no file")
+
+        await matches_collection.update_one(
+            {"match_id": match_id},
+            {
+                "$set": {
+                    "poster_path": str(poster_path),
+                    "poster_source": poster_source,
+                    "updated_at": datetime.utcnow(),
+                }
+            }
+        )
+
+        updated_match = await matches_collection.find_one({"match_id": match_id})
+
+        return JSONResponse(content={
+            "success": True,
+            "message": "Thumbnail generated successfully",
+            "match": match_helper(updated_match),
+        })
+
+    except HTTPException as exc:
+        return JSONResponse(content={
+            "success": False,
+            "error": exc.detail,
+        }, status_code=exc.status_code)
+    except Exception as e:
+        return JSONResponse(content={
+            "success": False,
+            "error": str(e)
+        }, status_code=500)
 
 @app.post("/api/matches/{match_id}/analyze")
 async def analyze_match(match_id: str):

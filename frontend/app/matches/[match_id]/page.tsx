@@ -7,7 +7,7 @@ import { SiteFooter } from "@/components/footer"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { 
   Play, Calendar, Loader2, AlertCircle, CheckCircle, 
-  ArrowLeft, Download, Trash2, RefreshCw, Video 
+  ArrowLeft, Download, Trash2, RefreshCw, Video, ImageIcon, X
 } from "lucide-react"
 
 interface EventClip {
@@ -22,6 +22,7 @@ interface Match {
   description: string
   video_path: string
   poster_path: string | null
+  poster_source?: string | null
   status: string
   main_highlights: string | null
   event_clips: EventClip
@@ -46,6 +47,8 @@ export default function MatchDetailsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false)
+  const [isThumbnailOpen, setIsThumbnailOpen] = useState(false)
   const [selectedClipType, setSelectedClipType] = useState<string>("main")
   const [currentVideoUrl, setCurrentVideoUrl] = useState<string>("")
   const [progressData, setProgressData] = useState<ProgressUpdate | null>(null)
@@ -183,6 +186,46 @@ export default function MatchDetailsPage() {
     }
   }
 
+  const handleGenerateThumbnail = async () => {
+    if (!match || isGeneratingThumbnail) return
+
+    setIsGeneratingThumbnail(true)
+
+    try {
+      const response = await fetch(`http://localhost:9000/api/matches/${matchId}/generate-thumbnail`, {
+        method: "POST",
+      })
+      const data = await response.json()
+
+      if (data.success) {
+        setDialog({
+          isOpen: true,
+          type: "success",
+          title: match.poster_path ? "Thumbnail Updated" : "Thumbnail Generated",
+          message: "Thumbnail is ready and has been saved for this match."
+        })
+        await fetchMatchDetails()
+      } else {
+        setDialog({
+          isOpen: true,
+          type: "error",
+          title: "Thumbnail Generation Failed",
+          message: data.error || "An error occurred while generating the thumbnail."
+        })
+      }
+    } catch (err) {
+      setDialog({
+        isOpen: true,
+        type: "error",
+        title: "Thumbnail Generation Failed",
+        message: "Failed to connect to the server. Please try again."
+      })
+      console.error(err)
+    } finally {
+      setIsGeneratingThumbnail(false)
+    }
+  }
+
   const handleDelete = async () => {
     setDialog({
       isOpen: true,
@@ -244,6 +287,14 @@ export default function MatchDetailsPage() {
       const url = `http://localhost:9000/api/media/${matchId}/${videoFileName}`
       window.open(url, '_blank')
     }
+  }
+
+  const getPosterUrl = () => {
+    if (!match?.poster_path) {
+      return "/placeholder.svg"
+    }
+
+    return `http://localhost:9000/api/media/${matchId}/${match.poster_path.split(/[/\\\\]/).pop()}`
   }
 
   if (isLoading) {
@@ -331,7 +382,7 @@ export default function MatchDetailsPage() {
               </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {match.status === "uploaded" && (
                 <button
                   onClick={handleAnalyze}
@@ -359,6 +410,33 @@ export default function MatchDetailsPage() {
                 >
                   <RefreshCw className="w-4 h-4" />
                   Re-analyze
+                </button>
+              )}
+              <button
+                onClick={match.poster_path ? () => setIsThumbnailOpen(true) : handleGenerateThumbnail}
+                disabled={isGeneratingThumbnail}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-lg font-medium hover:bg-amber-500/20 disabled:opacity-50 transition-all"
+              >
+                {isGeneratingThumbnail ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon className="w-4 h-4" />
+                    {match.poster_path ? "View Thumbnail" : "Generate Thumbnail"}
+                  </>
+                )}
+              </button>
+              {match.poster_path && (
+                <button
+                  onClick={handleGenerateThumbnail}
+                  disabled={isGeneratingThumbnail}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-secondary text-foreground rounded-lg font-medium hover:bg-secondary/80 disabled:opacity-50 transition-all"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isGeneratingThumbnail ? "animate-spin" : ""}`} />
+                  Regenerate Thumbnail
                 </button>
               )}
               <button
@@ -583,6 +661,27 @@ export default function MatchDetailsPage() {
       </section>
 
       <SiteFooter />
+
+      {isThumbnailOpen && match.poster_path && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
+          <div className="relative w-full max-w-5xl overflow-hidden rounded-2xl border border-white/10 bg-neutral-950 shadow-2xl">
+            <button
+              onClick={() => setIsThumbnailOpen(false)}
+              className="absolute right-4 top-4 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="relative aspect-video w-full bg-black">
+              <img
+                src={getPosterUrl()}
+                alt={`${match.title} thumbnail`}
+                className="h-full w-full object-cover"
+              />
+            </div>
+          </div>
+        </div>
+      )}
       
       <ConfirmDialog
         isOpen={dialog.isOpen}

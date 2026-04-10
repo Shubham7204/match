@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/SHUBHAM/.claude/plugins/marketplaces/understand-anything/understand-anything-plugin/**)",
+      "Bash(pnpm install:*)"
+    ]
+  }
+}
